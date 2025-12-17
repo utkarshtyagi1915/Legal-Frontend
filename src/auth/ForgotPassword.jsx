@@ -4,7 +4,7 @@ import { ToastContainer, toast } from "react-toastify";
 import "react-toastify/dist/ReactToastify.css";
 import { useNavigate } from "react-router-dom";
 
-import loginBg from "../assets/loginBg.png";
+import loginBg from "../assets/loginbg.png";
 import loginleft from "../assets/loginleft.jpg";
 import logo from "../../public/logo.png";
 
