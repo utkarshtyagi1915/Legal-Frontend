@@ -1,0 +1,14 @@
+/* Headings (h1–h5) use Merriweather for professional/legal feel */
+h1, h2, h3, h4, h5 {
+  font-family: 'Merriweather', serif;
+}
+
+/* All other text uses Roboto for readability */
+body, p, span, li, a, button {
+  font-family: 'Roboto', sans-serif;
+}
+
+/* in App.css */
+.menu-transition {
+  transition: all 0.3s ease-in-out;
+}
