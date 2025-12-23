@@ -17,6 +17,7 @@ import TemplateLibrary from "./pages/TemplateLibrary";
 import TemplateView from "./pages/TemplateView";
 import LandingPage from "./pages/LandingPage";
 import UserDashboard from "./pages/UserDashboard";
+// import ContractAnalysis from "./pages/ContractAnalysis";
  
 // Newly added
 import ForgotPassword from "./auth/ForgotPassword";
@@ -65,7 +66,7 @@ const AppLayout = () => {
           />
  
           <Route
-            path="/template-view/:id"
+            path="/template-view/:templateId"
             element={
               <PrivateRoute>
                 <TemplateView />
@@ -90,6 +91,15 @@ const AppLayout = () => {
               </PrivateRoute>
             }
           />
+ 
+          {/* <Route
+            path="/contract-analytics"
+            element={
+              <PrivateRoute>
+                <ContractAnalysis />
+              </PrivateRoute>
+            }
+          /> */}
         </Routes>
       </div>
     </div>
@@ -103,4 +113,5 @@ export default function App() {
     </Router>
   );
 }
+ 
  

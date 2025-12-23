@@ -30,7 +30,7 @@ const Login = () => {
   // Step 1 → Login → Request OTP
   const handleLoginClick = async () => {
     if (!email || !password) return toast.error("Enter both email and password.");
-    if (!captchaValue) return toast.error("Please verify reCAPTCHA.");
+    // if (!captchaValue) return toast.error("Please verify reCAPTCHA.");
 
     setLoading(true);
 
@@ -39,7 +39,7 @@ const Login = () => {
       email,
       password,
       type: "user",
-      captcha_token: captchaValue,
+      // captcha_token: captchaValue,
     };
 
     console.log("Sending login request to backend:");
@@ -193,12 +193,12 @@ const handleOtpVerified = (jwtToken) => {
 
 
           {/* reCAPTCHA */}
-          <div className="flex justify-center">
+          {/* <div className="flex justify-center">
             <ReCAPTCHA
               sitekey="6LdQFoUrAAAAAPtwk0GeFVhA7fUenVLtedLApb55"
               onChange={(value) => setCaptchaValue(value)}
             />
-          </div>
+          </div> */}
 
           {/* Login Button */}
           <button

@@ -31,7 +31,7 @@ const Signup = () => {
         if (!password) return toast.error("Please enter a password.");
         if (!confirmPassword) return toast.error("Please confirm your password.");
         if (password !== confirmPassword) return toast.error("Passwords do not match.");
-        if (!captchaValue) return toast.error("Please verify reCAPTCHA.");
+        // if (!captchaValue) return toast.error("Please verify reCAPTCHA.");
 
         setLoading(true);
 
@@ -39,7 +39,7 @@ const Signup = () => {
             email,
             password,
             full_name: fullName,
-            captcha_token: captchaValue,
+            // captcha_token: captchaValue,
         };
 
         try {
@@ -167,12 +167,12 @@ const Signup = () => {
                     </div>
 
                     {/* reCAPTCHA */}
-                    <div className="flex justify-center">
+                    {/* <div className="flex justify-center">
                         <ReCAPTCHA
                             sitekey="6LdQFoUrAAAAAPtwk0GeFVhA7fUenVLtedLApb55"
                             onChange={(value) => setCaptchaValue(value)}
                         />
-                    </div>
+                    </div> */}
 
                     {/* Signup Button */}
                     <button

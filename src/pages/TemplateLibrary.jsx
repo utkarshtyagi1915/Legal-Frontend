@@ -19,24 +19,42 @@ const TemplateLibrary = () => {
 
   /* ================= FETCH PRIVATE TEMPLATES ================= */
   const fetchTemplates = async () => {
-    try {
-      const res = await fetch(`${BACKEND_URL}/templates/list`);
-      if (!res.ok) throw new Error("Failed to fetch templates");
+  try {
+    const token = localStorage.getItem("authToken");
 
-      const data = await res.json();
-
-      const files = data.map((filename, index) => ({
-        id: `template-${index}`,
-        title: filename,
-        filename,
-      }));
-
-      setTemplates(files);
-    } catch (err) {
-      console.error(err);
-      toast.error("Failed to load templates");
+    if (!token) {
+      toast.error("You are not logged in");
+      return;
     }
-  };
+
+    const res = await fetch(`${BACKEND_URL}/templates/list`, {
+      method: "GET",
+      headers: {
+        "Authorization": `Bearer ${token}`,
+      },
+    });
+
+    if (!res.ok) throw new Error("Failed to fetch templates");
+
+    const data = await res.json();
+
+    // Backend returns: { status: "success", templates: [...] }
+    const files = data.templates.map((item, index) => ({
+      id: item.template_id,
+      title: item.file_name,
+      filename: item.file_name,
+      blob: item.blob_name,
+      uploadedAt: item.uploaded_at,
+    }));
+
+    setTemplates(files);
+
+  } catch (err) {
+    console.error("Fetch templates error:", err);
+    toast.error("Failed to load templates");
+  }
+};
+
 
   useEffect(() => {
     fetchTemplates();
@@ -44,83 +62,119 @@ const TemplateLibrary = () => {
 
   /* ================= UPLOAD ================= */
   const handleUpload = async (e) => {
-    const file = e.target.files[0];
-    if (!file) return;
+  const file = e.target.files[0];
+  if (!file) return;
 
-    const MAX_FILE_SIZE = 20 * 1024 * 1024;
-    if (file.size > MAX_FILE_SIZE) {
-      toast.error("File size must be less than 20 MB");
-      e.target.value = "";
+  const MAX_FILE_SIZE = 20 * 1024 * 1024;
+  if (file.size > MAX_FILE_SIZE) {
+    toast.error("File size must be less than 20 MB");
+    e.target.value = "";
+    return;
+  }
+
+  try {
+    const token = localStorage.getItem("authToken");
+
+    if (!token) {
+      toast.error("You are not logged in");
       return;
     }
 
-    try {
-      const formData = new FormData();
-      formData.append("file", file);
+    const formData = new FormData();
+    formData.append("file", file);
 
-      const res = await fetch(`${BACKEND_URL}/templates/upload`, {
-        method: "POST",
-        body: formData,
-      });
+    const res = await fetch(`${BACKEND_URL}/templates/upload`, {
+      method: "POST",
+      headers: {
+        Authorization: `Bearer ${token}`,
+      },
+      body: formData,
+    });
 
-      if (!res.ok) throw new Error();
+    if (!res.ok) throw new Error("Upload failed");
 
-      const data = await res.json();
+    const data = await res.json();
 
-      setTemplates((prev) => [
-        ...prev,
-        {
-          id: `template-${Date.now()}`,
-          title: data.file_name,
-          filename: data.file_name,
-        },
-      ]);
+    const t = data.template;
 
-      toast.success("Template uploaded successfully");
-    } catch {
-      toast.error("Upload failed");
-    } finally {
-      e.target.value = "";
-    }
-  };
+    setTemplates((prev) => [
+      ...prev,
+      {
+        id: t.template_id,
+        title: t.file_name,
+        filename: t.file_name,
+        blob: t.blob_name,
+        uploadedAt: t.uploaded_at,
+      },
+    ]);
+
+    toast.success("Template uploaded successfully");
+  } catch (err) {
+    console.error("Upload error:", err);
+    toast.error("Upload failed");
+  } finally {
+    e.target.value = "";
+  }
+};
 
   /* ================= DELETE (UI ONLY) ================= */
-  const handleDelete = (filename) => {
-    setTemplates((prev) =>
-      prev.filter((t) => t.filename !== filename)
-    );
-    toast.info("Template removed");
-  };
+const handleDelete = async (templateId) => {
+  try {
+    const token = localStorage.getItem("authToken");
+
+    console.log("TOKEN USED FOR DELETE:", token);
+
+    if (!token) {
+      toast.error("Not authenticated");
+      return;
+    }
+
+    const res = await fetch(`${BACKEND_URL}/templates/${templateId}`, {
+      method: "DELETE",
+      headers: {
+        "Authorization": `Bearer ${token}`,
+      },
+    });
+
+    const txt = await res.text();
+    console.log("DELETE RESPONSE:", res.status, txt);
+
+    if (!res.ok) {
+      toast.error("Failed to delete template");
+      return;
+    }
+
+    setTemplates(prev => prev.filter(t => t.id !== templateId));
+    toast.success("Template deleted");
+  } catch (error) {
+    console.error("DELETE ERROR:", error);
+    toast.error("Delete failed");
+  }
+};
+
 
   /* ================= USE TEMPLATE ================= */
   const handleUseTemplate = async (template) => {
-    try {
-      setLoadingId(template.id);
+  try {
+    setLoadingId(template.id);
 
-      const res = await fetch(
-        `${BACKEND_URL}/templates/view?filename=${encodeURIComponent(
-          template.filename
-        )}`
-      );
+    navigate(`/template-view/${template.id}`, {
+      state: {
+        templateMeta: {
+          id: template.id,
+          title: template.title,
+          filename: template.filename,
+          uploadedAt: template.uploadedAt,
+        }
+      },
+    });
 
-      if (!res.ok) throw new Error();
-
-      const text = await res.text();
-
-      navigate(`/template-view/${template.id}`, {
-        state: {
-          template: {
-            ...template,
-            content: text,
-          },
-        },
-      });
-    } catch {
-      toast.error("Failed to open template");
-    } finally {
-      setLoadingId(null);
-    }
-  };
+  } catch (err) {
+    toast.error("Failed to open template");
+  } finally {
+    setLoadingId(null);
+  }
+};
 
   return (
     <div className="bg-white h-screen flex flex-col rounded-l-3xl shadow-xl">
@@ -159,7 +213,7 @@ const TemplateLibrary = () => {
               >
                 {/* DELETE */}
                 <button
-                  onClick={() => handleDelete(template.filename)}
+                  onClick={() => handleDelete(template.id)}
                   className="cursor-pointer absolute top-4 right-4 text-gray-400 hover:text-red-500"
                 >
                   <FaTrash />
