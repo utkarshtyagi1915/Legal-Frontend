@@ -1,7 +1,7 @@
 import React, { useState } from "react";
-import { FaPaperclip, FaArrowUp, FaTimes } from "react-icons/fa";
+import { FaPaperclip, FaArrowUp, FaTimes, FaPause } from "react-icons/fa";
  
-const ChatInput = ({ onSend }) => {
+const ChatInput = ({ onSend, disabled, onPause }) => {
   const [message, setMessage] = useState("");
   const [selectedFile, setSelectedFile] = useState(null);
  
@@ -57,7 +57,12 @@ const ChatInput = ({ onSend }) => {
           value={message}
           onChange={(e) => setMessage(e.target.value)}
           onKeyDown={handleKeyDown}
-          className="flex-1 resize-none rounded-2xl border border-gray-300 px-4 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-orange-400 placeholder-gray-400"
+          disabled={disabled}
+          className={`flex-1 resize-none rounded-2xl border px-4 py-2 text-sm focus:outline-none placeholder-gray-400 ${
+            disabled
+              ? "border-gray-200 bg-gray-100 text-gray-500"
+              : "border-gray-300 focus:ring-2 focus:ring-orange-400"
+          }`}
         />
  
         {/* File upload */}
@@ -66,13 +71,24 @@ const ChatInput = ({ onSend }) => {
           <input type="file" hidden onChange={handleFileChange} />
         </label>
  
-        {/* Send button */}
-        <button
-          onClick={sendMessage}
-          className="bg-orange-500 hover:bg-orange-600 text-white p-2.5 rounded-full shadow-md transition"
-        >
-          <FaArrowUp />
-        </button>
+        {/* Send / Pause */}
+        {disabled ? (
+          <button
+            onClick={onPause}
+            className="bg-gray-200 hover:bg-gray-300 text-gray-700 p-2.5 rounded-full shadow-md transition"
+            title="Pause"
+          >
+            <FaPause />
+          </button>
+        ) : (
+          <button
+            onClick={sendMessage}
+            className="bg-orange-500 hover:bg-orange-600 text-white p-2.5 rounded-full shadow-md transition"
+            title="Send"
+          >
+            <FaArrowUp />
+          </button>
+        )}
       </div>
     </div>
   );

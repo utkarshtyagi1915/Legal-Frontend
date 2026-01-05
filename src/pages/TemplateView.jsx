@@ -1,18 +1,15 @@
 import React, { useEffect, useState } from "react";
-import { useLocation, useNavigate } from "react-router-dom";
+import { useNavigate, useParams } from "react-router-dom";
 import {
   FaArrowLeft,
   FaDownload,
   FaPrint,
   FaSave,
-  FaEdit,
-  FaEye,
 } from "react-icons/fa";
 import { useQuill } from "react-quilljs";
 import { jsPDF } from "jspdf";
 import { toast, ToastContainer } from "react-toastify";
-import html2canvas from "html2canvas";
-
+import axios from "axios";
 import "quill/dist/quill.snow.css";
 import "react-toastify/dist/ReactToastify.css";
 
@@ -29,149 +26,191 @@ const quillModules = {
 
 const TemplateView = () => {
   const navigate = useNavigate();
-  const { state } = useLocation();
-  const { template } = state || {};
+  const { templateId } = useParams();
 
+  const BACKEND_URL = import.meta.env.VITE_BACKEND_URL;
+
+  const [template, setTemplate] = useState(null);
   const [content, setContent] = useState("");
-  const [isEditing, setIsEditing] = useState(true);
+  const [isEditing] = useState(true);
 
   const { quill, quillRef } = useQuill({
     theme: "snow",
     modules: quillModules,
   });
 
-  /* ================= LOAD CONTENT ================= */
+  // 🔥 1️⃣ LOAD FROM BACKEND — FIRST useEffect
+  // 1️⃣ LOAD BACKEND IMMEDIATELY (DO NOT WAIT FOR quill)
   useEffect(() => {
+    console.log("🌀 useEffect 1: backend loader triggered");
+    console.log(" - templateId =", templateId);
+
+    if (!templateId) {
+      console.log("❌ templateId missing");
+      return;
+    }
+
+    const loadBackend = async () => {
+      try {
+        const token = localStorage.getItem("authToken");
+        console.log("🔑 token =", token);
+
+        const url = `${BACKEND_URL}/templates/view/${templateId}`;
+        console.log("🌍 Fetching:", url);
+
+        const res = await fetch(url, {
+          headers: { Authorization: `Bearer ${token}` },
+        });
+
+        console.log("📡 Backend status:", res.status);
+
+        const data = await res.json();
+        console.log("📥 Backend JSON:", data);
+
+        setTemplate({
+          id: templateId,
+          filename: data.file_name,
+          content: data.content,
+        });
+
+        setContent(data.content);
+
+        console.log("✔ Template loaded into state");
+
+      } catch (err) {
+        console.log("❌ Backend fetch failed:", err);
+        toast.error("Failed to load");
+      }
+    };
+
+    loadBackend();
+  }, [templateId]);
+
+
+
+  // 2️⃣ LOAD INTO QUILL WHEN BOTH (template + quill) ARE READY
+  useEffect(() => {
+    console.log("🌀 useEffect 2: quill loader");
+    console.log(" - template =", template);
+    console.log(" - quill ready =", !!quill);
+
     if (!template || !quill) return;
 
     const saved = localStorage.getItem(`draft-${template.filename}`);
-    const initialContent = saved || template.content || "";
+    const initial = saved || template.content;
 
-    setContent(initialContent);
-    quill.root.innerHTML = initialContent;
+    console.log("📝 Loading content into quill");
 
-    quill.on("text-change", () => {
-      setContent(quill.root.innerHTML);
-    });
+    quill.clipboard.dangerouslyPasteHTML(initial);
+    setContent(initial);
+
+    const handler = () => setContent(quill.root.innerHTML);
+
+    quill.on("text-change", handler);
+
+    return () => quill.off("text-change", handler);
   }, [template, quill]);
 
-  /* ================= SAVE DRAFT ================= */
-  const handleSaveDraft = () => {
-    localStorage.setItem(`draft-${template.filename}`, content);
-    toast.success("Draft saved successfully");
-  };
 
-  /* ================= DOWNLOAD PDF (FIXED) ================= */
-  const handleDownloadPDF = async () => {
-    const temp = document.createElement("div");
 
-    temp.className = "ql-editor";
-    temp.innerHTML = content;
+  // 🔥  SAVE to backend
+  const handleSaveDraft = async () => {
+    const token = localStorage.getItem("authToken");
 
-    // A4 width @ 96 DPI
-    temp.style.width = "794px";
-    temp.style.padding = "40px";
-    temp.style.fontSize = "14px";
-    temp.style.lineHeight = "1.6";
-    temp.style.fontFamily = "Arial";
-    temp.style.background = "#ffffff";
+    const formData = new FormData();
+    formData.append("content", content);
 
-    document.body.appendChild(temp);
-
-    const canvas = await html2canvas(temp, {
-      scale: 2, // HIGH QUALITY
-      useCORS: true,
-      backgroundColor: "#ffffff",
+    const res = await fetch(`${BACKEND_URL}/templates/save/${template.id}`, {
+      method: "POST",
+      headers: { Authorization: `Bearer ${token}` },
+      body: formData,
     });
 
-    document.body.removeChild(temp);
-
-    const imgData = canvas.toDataURL("image/png");
-
-    const pdf = new jsPDF("p", "pt", "a4");
-    const pageWidth = pdf.internal.pageSize.getWidth();
-    const pageHeight = pdf.internal.pageSize.getHeight();
-
-    const imgWidth = pageWidth;
-    const imgHeight = (canvas.height * imgWidth) / canvas.width;
-
-    let heightLeft = imgHeight;
-    let position = 0;
-
-    pdf.addImage(imgData, "PNG", 0, position, imgWidth, imgHeight);
-    heightLeft -= pageHeight;
-
-    while (heightLeft > 0) {
-      position -= pageHeight;
-      pdf.addPage();
-      pdf.addImage(imgData, "PNG", 0, position, imgWidth, imgHeight);
-      heightLeft -= pageHeight;
-    }
-
-    pdf.save(`${template.title || "document"}.pdf`);
+    if (res.ok) toast.success("Template saved!");
+    else toast.error("Save failed");
   };
 
-  /* ================= PRINT ================= */
+
+  const handleDownloadPDF = async () => {
+    try {
+      const pdf = new jsPDF("p", "pt", "a4");
+
+      const wrapper = document.createElement("div");
+      wrapper.innerHTML = content;
+
+      wrapper.style.width = "595px";
+      wrapper.style.padding = "40px";
+      wrapper.style.fontSize = "12px";
+      wrapper.style.lineHeight = "1.6";
+      wrapper.style.fontFamily = "Times New Roman";
+
+      // 👉 Generate PDF
+      await pdf.html(wrapper, {
+        x: 0,
+        y: 0,
+        width: 515,
+        windowWidth: 595,
+        html2canvas: { scale: 1, useCORS: true },
+        callback: async (doc) => {
+          // 👉 Save PDF to user's device
+          doc.save(`${template?.filename || "document"}.pdf`);
+
+          // 👉 Log the download in backend
+          try {
+            await axios.post(
+              `${BACKEND_URL}/templates/download/log`,
+              {
+                template_id: template?.template_id,
+                file_name: template?.filename,
+              },
+              {
+                headers: {
+                  Authorization: `Bearer ${localStorage.getItem("authToken")}`,
+                },
+              }
+            );
+          } catch (err) {
+            console.error("Download log error:", err);
+            // no toast — logging failure shouldn't bother the user
+          }
+        },
+      });
+    } catch (err) {
+      console.error("PDF download error:", err);
+      toast.error("Failed to download PDF");
+    }
+  };
+
+  // 🔥  PRINT
   const handlePrint = () => {
     const win = window.open("", "_blank");
     win.document.write(`
-      <html>
-        <head>
-          <style>
-            body {
-              font-family: Arial;
-              padding: 40px;
-              line-height: 1.6;
-            }
-            .ql-editor {
-              max-width: 800px;
-              margin: auto;
-            }
-          </style>
-        </head>
-        <body>
-          <div class="ql-editor">
-            ${content}
-          </div>
-        </body>
-      </html>
+      <html><body style="padding:40px; line-height:1.6;">
+        ${content}
+      </body></html>
     `);
     win.document.close();
     win.print();
   };
 
-  if (!template) return <div>Template not found</div>;
 
   return (
     <div className="bg-gray-100 h-screen flex flex-col rounded-l-4xl shadow-xl">
       <ToastContainer position="bottom-center" />
 
-      {/* ================= TOOLBAR ================= */}
+      {/* Header */}
       <div className="flex justify-between items-center px-6 py-3 border-b bg-white">
-        <button
-          onClick={() => navigate(-1)}
-          className="flex items-center gap-2"
-        >
+        <button onClick={() => navigate(-1)} className="flex items-center gap-2">
           <FaArrowLeft /> Back
         </button>
 
         <div className="flex gap-2">
           <button
-            onClick={() => setIsEditing(!isEditing)}
-            className="px-4 py-2 bg-blue-100 rounded flex items-center gap-2"
+            onClick={handleSaveDraft}
+            className="px-4 py-2 bg-purple-100 rounded flex items-center gap-2"
           >
-            {isEditing ? <FaEye /> : <FaEdit />}
-            {isEditing ? "View" : "Edit"}
+            <FaSave /> Save
           </button>
-
-          {isEditing && (
-            <button
-              onClick={handleSaveDraft}
-              className="px-4 py-2 bg-purple-100 rounded flex items-center gap-2"
-            >
-              <FaSave /> Save
-            </button>
-          )}
 
           <button
             onClick={handleDownloadPDF}
@@ -189,29 +228,18 @@ const TemplateView = () => {
         </div>
       </div>
 
-      {/* ================= CONTENT ================= */}
+      {/* Editor */}
       <div className="flex-1 overflow-y-auto">
         <div className="mx-auto max-w-[1120px] bg-white shadow-lg rounded-md min-h-[1123px]">
-          {isEditing ? (
-            <div
-              ref={quillRef}
-              className="min-h-[1123px]"
-              style={{
-                padding: "40px",
-                fontSize: "14px",
-                lineHeight: "1.6",
-              }}
-            />
-          ) : (
-            <div
-              className="ql-editor p-10"
-              style={{
-                fontSize: "14px",
-                lineHeight: "1.6",
-              }}
-              dangerouslySetInnerHTML={{ __html: content }}
-            />
-          )}
+          <div
+            ref={quillRef}
+            className="min-h-[1123px]"
+            style={{
+              padding: "40px",
+              fontSize: "14px",
+              lineHeight: "1.6",
+            }}
+          />
         </div>
       </div>
     </div>

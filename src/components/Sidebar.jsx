@@ -16,7 +16,7 @@ const Sidebar = () => {
 
   const API_BASE = import.meta.env.VITE_BACKEND_URL;
   const token = localStorage.getItem("authToken");
-  
+
   // 🔹 Fetch chat threads from backend
   const fetchChatHistory = async () => {
     try {
@@ -48,7 +48,7 @@ const Sidebar = () => {
     { label: "Dashboard", path: "/dashboard", icon: "🏠" },
     { label: "Template Library", path: "/template-library", icon: "📁" },
     { label: "AI Chat Assistant", path: "/lexi-chat", icon: "💬" },
-    { label: "Admin & Settings", path: "/admin-settings", icon: "⚙️" },
+    // { label: "Contract Analytics", path: "/contract-analytics", icon: "⚙️" },
   ];
 
   const handleChatClick = (threadId, title) => {
@@ -84,9 +84,8 @@ const Sidebar = () => {
 
   return (
     <aside
-      className={`${
-        collapsed ? "w-16" : "w-60"
-      } bg-gray-50 shadow-lg flex flex-col justify-between transition-all duration-300 border-r border-gray-200`}
+      className={`${collapsed ? "w-16" : "w-60"
+        } bg-gray-50 shadow-lg flex flex-col justify-between transition-all duration-300 border-r border-gray-200`}
     >
       {/* Header */}
       <div className="p-4 flex items-center justify-between">
@@ -111,11 +110,10 @@ const Sidebar = () => {
           {menuItems.map((item) => (
             <Link key={item.path} to={item.path}>
               <div
-                className={`flex items-center gap-5 px-2 py-2 rounded-xl text-sm font-medium ${
-                  location.pathname === item.path
-                    ? "bg-orange-500 text-white"
-                    : "hover:bg-orange-100 text-gray-700"
-                }`}
+                className={`flex items-center gap-5 px-2 py-2 rounded-xl text-sm font-medium ${location.pathname === item.path
+                  ? "bg-orange-500 text-white"
+                  : "hover:bg-orange-100 text-gray-700"
+                  }`}
               >
                 <span>{item.icon}</span>
                 {!collapsed && <span>{item.label}</span>}
@@ -127,9 +125,9 @@ const Sidebar = () => {
             <button
               onClick={() =>
                 navigate("/lexi-chat", {
-  replace: false,
-  state: { newChat: true, ts: Date.now() },
-})
+                  replace: false,
+                  state: { newChat: true, ts: Date.now() },
+                })
               }
               className="w-full mt-2 bg-orange-500 hover:bg-orange-600 text-white py-2 rounded-lg"
             >
@@ -192,19 +190,8 @@ const Sidebar = () => {
       </div>
 
       {/* Bottom */}
-      <div className="p-4 border-t bg-white">
-        <button
-          onClick={() => {
-            localStorage.clear();
-            sessionStorage.clear();
-            navigate("/login");
-          }}
-          className="w-full bg-red-500 text-white py-2 rounded-lg hover:bg-red-600 mb-3"
-        >
-          🔒 Logout
-        </button>
-
-        <SidebarProfile />
+      <div className="p-2 border-t bg-white">
+        <SidebarProfile collapsed={collapsed} />
       </div>
     </aside>
   );
