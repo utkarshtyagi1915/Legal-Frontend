@@ -12,20 +12,20 @@ import {
   FaBan,
   FaCheckCircle,
   FaTimes,
-  FaUserPlus,
+ 
   FaTrashAlt,
   FaPauseCircle,
   FaPlayCircle,
   FaExclamationTriangle,
   FaArrowLeft,
   FaEllipsisV,
-  FaEdit,
+ 
   FaEye,
   FaCoins,
   FaChartLine,
 } from "react-icons/fa";
-import { toast } from "react-toastify";
-
+import { toast, ToastContainer } from "react-toastify";
+ 
 const AdminUsers = () => {
   const navigate = useNavigate();
   const [users, setUsers] = useState([]);
@@ -34,32 +34,26 @@ const AdminUsers = () => {
   const [statusFilter, setStatusFilter] = useState("all");
   const [sortBy, setSortBy] = useState("date");
   const [sortOrder, setSortOrder] = useState("desc");
-
+ 
   // Modal states
-  const [showAddUserModal, setShowAddUserModal] = useState(false);
+ 
   const [showConfirmModal, setShowConfirmModal] = useState(false);
   const [showTokenModal, setShowTokenModal] = useState(false);
   const [showDetailsModal, setShowDetailsModal] = useState(false);
-  const [showEditModal, setShowEditModal] = useState(false);
   const [confirmAction, setConfirmAction] = useState(null);
   const [selectedUser, setSelectedUser] = useState(null);
-  const [editUserData, setEditUserData] = useState({
-    name: "",
-    email: "",
-    role: "user",
-  });
-
+ 
+ 
   // Dropdown menu state
   const [openDropdownId, setOpenDropdownId] = useState(null);
   const dropdownRef = useRef(null);
-
-  // New user form
-  const [newUser, setNewUser] = useState({ name: "", email: "", password: "" });
-
+ 
+ 
+ 
   useEffect(() => {
     fetchUsers();
   }, [statusFilter, sortBy, sortOrder]);
-
+ 
   // Close dropdown when clicking outside
   useEffect(() => {
     const handleClickOutside = (event) => {
@@ -67,15 +61,15 @@ const AdminUsers = () => {
         setOpenDropdownId(null);
       }
     };
-
+ 
     document.addEventListener("mousedown", handleClickOutside);
     return () => document.removeEventListener("mousedown", handleClickOutside);
   }, []);
-
+ 
   const fetchUsers = async () => {
     try {
       setLoading(true);
-
+ 
       const res = await fetch(
         `${import.meta.env.VITE_BACKEND_URL}/admin/users`,
         {
@@ -84,17 +78,17 @@ const AdminUsers = () => {
           },
         }
       );
-
+ 
       if (!res.ok) throw new Error("Failed to fetch users");
-
+ 
       const data = await res.json();
       let fetched = data.users || [];
-
+ 
       // Status filter
       if (statusFilter !== "all") {
         fetched = fetched.filter((u) => u.status === statusFilter);
       }
-
+ 
       // Sorting
       fetched.sort((a, b) => {
         let cmp = 0;
@@ -104,7 +98,7 @@ const AdminUsers = () => {
         if (sortBy === "tokens") cmp = b.tokenUsage.used - a.tokenUsage.used;
         return sortOrder === "desc" ? cmp : -cmp;
       });
-
+ 
       setUsers(fetched);
     } catch (err) {
       console.error(err);
@@ -113,39 +107,9 @@ const AdminUsers = () => {
       setLoading(false);
     }
   };
-
-  const handleAddUser = async () => {
-    if (!newUser.name || !newUser.email || !newUser.password) {
-      toast.error("Please fill in all fields");
-      return;
-    }
-
-    try {
-      const newUserObj = {
-        id: users.length + 1,
-        ...newUser,
-        status: "active",
-        role: "user",
-        joinDate: new Date().toISOString(),
-        templatesCount: 0,
-        lastActive: new Date().toISOString(),
-        tokenUsage: {
-          used: 0,
-          limit: 10000,
-          history: [],
-        },
-      };
-
-      setUsers([newUserObj, ...users]);
-      setShowAddUserModal(false);
-      setNewUser({ name: "", email: "", password: "" });
-      toast.success(`User "${newUser.name}" added successfully!`);
-    } catch (error) {
-      console.error("Error adding user:", error);
-      toast.error("Failed to add user");
-    }
-  };
-
+ 
+ 
+ 
   const handleSuspendUser = async (userId) => {
     try {
       setUsers((prev) =>
@@ -157,7 +121,7 @@ const AdminUsers = () => {
       toast.error("Failed to suspend user");
     }
   };
-
+ 
   const handleActivateUser = async (userId) => {
     try {
       setUsers((prev) =>
@@ -169,33 +133,47 @@ const AdminUsers = () => {
       toast.error("Failed to activate user");
     }
   };
-
+ 
   const handleRemoveUser = async (userId) => {
     try {
+      const res = await fetch(
+        `${import.meta.env.VITE_BACKEND_URL}/admin/users/${userId}`,
+        {
+          method: "DELETE",
+          headers: {
+            Authorization: `Bearer ${localStorage.getItem("authToken")}`,
+          },
+        }
+      );
+ 
+      if (!res.ok) {
+        throw new Error("Failed to remove user");
+      }
+ 
       setUsers((prev) => prev.filter((u) => u.id !== userId));
-      toast.success(`User removed successfully`);
+      toast.success("User removed successfully");
     } catch (error) {
       console.error("Error removing user:", error);
       toast.error("Failed to remove user");
     }
   };
-
+ 
   const openConfirmModal = (action, user) => {
     setConfirmAction(action);
     setSelectedUser(user);
     setShowConfirmModal(true);
     setOpenDropdownId(null);
   };
-
+ 
   const openTokenModal = (user) => {
     setSelectedUser(user);
     setShowTokenModal(true);
     setOpenDropdownId(null);
   };
-
+ 
   const executeConfirmAction = () => {
     if (!selectedUser || !confirmAction) return;
-
+ 
     switch (confirmAction) {
       case "suspend":
         handleSuspendUser(selectedUser.id);
@@ -207,12 +185,12 @@ const AdminUsers = () => {
         handleRemoveUser(selectedUser.id);
         break;
     }
-
+ 
     setShowConfirmModal(false);
     setConfirmAction(null);
     setSelectedUser(null);
   };
-
+ 
   const getStatusBadge = (status) => {
     const badges = {
       active: {
@@ -239,7 +217,7 @@ const AdminUsers = () => {
     };
     return badges[status] || badges.inactive;
   };
-
+ 
   const getInitials = (name) => {
     if (!name) return "U";
     return name
@@ -249,10 +227,10 @@ const AdminUsers = () => {
       .toUpperCase()
       .slice(0, 2);
   };
-
+ 
   const getConfirmModalContent = () => {
     if (!confirmAction || !selectedUser) return {};
-
+ 
     const content = {
       suspend: {
         title: "Suspend User",
@@ -276,24 +254,24 @@ const AdminUsers = () => {
         buttonClass: "bg-red-500 hover:bg-red-600",
       },
     };
-
+ 
     return content[confirmAction] || {};
   };
-
+ 
   const formatNumber = (num) => {
     return num.toString().replace(/\B(?=(\d{3})+(?!\d))/g, ",");
   };
-
+ 
   const getTokenPercentage = (used, limit) => {
     return Math.round((used / limit) * 100);
   };
-
+ 
   const filteredUsers = users.filter(
     (u) =>
       u.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
       u.email.toLowerCase().includes(searchQuery.toLowerCase())
   );
-
+ 
   // Stats
   const stats = {
     total: users.length,
@@ -301,11 +279,11 @@ const AdminUsers = () => {
     inactive: users.filter((u) => u.status === "inactive").length,
     suspended: users.filter((u) => u.status === "suspended").length,
   };
-
+ 
   // Action Dropdown Menu
   const ActionDropdown = ({ user }) => {
     const isOpen = openDropdownId === user.id;
-
+ 
     const menuItems = [
       // {
       //     label: "View Token Usage",
@@ -325,41 +303,7 @@ const AdminUsers = () => {
         color: "text-slate-600",
         hoverBg: "hover:bg-slate-50",
       },
-      {
-        label: "Edit User",
-        icon: <FaEdit />,
-        onClick: () => {
-          setOpenDropdownId(null);
-          setSelectedUser(user);
-          setEditUserData({
-            name: user.name,
-            email: user.email,
-            role: user.role,
-          });
-          setShowEditModal(true);
-        },
-        color: "text-blue-600",
-        hoverBg: "hover:bg-blue-50",
-      },
-      ...(user.status === "suspended"
-        ? [
-            {
-              label: "Activate User",
-              icon: <FaPlayCircle />,
-              onClick: () => openConfirmModal("activate", user),
-              color: "text-emerald-600",
-              hoverBg: "hover:bg-emerald-50",
-            },
-          ]
-        : [
-            {
-              label: "Suspend User",
-              icon: <FaBan />,
-              onClick: () => openConfirmModal("suspend", user),
-              color: "text-amber-600",
-              hoverBg: "hover:bg-amber-50",
-            },
-          ]),
+ 
       {
         label: "Remove User",
         icon: <FaTrashAlt />,
@@ -369,7 +313,7 @@ const AdminUsers = () => {
         divider: true,
       },
     ];
-
+ 
     return (
       <div className="relative" ref={isOpen ? dropdownRef : null}>
         <button
@@ -382,7 +326,7 @@ const AdminUsers = () => {
         >
           <FaEllipsisV className="text-slate-400" />
         </button>
-
+ 
         {isOpen && (
           <div className="absolute right-0 top-full mt-1 w-52 bg-white rounded-xl shadow-xl border border-gray-100 py-1 z-50 animate-fadeIn">
             {menuItems.map((item, index) => (
@@ -407,16 +351,16 @@ const AdminUsers = () => {
       </div>
     );
   };
-
+ 
   // Token Usage Modal
   const TokenModal = () => {
     if (!showTokenModal || !selectedUser) return null;
-
+ 
     const tokenPercentage = getTokenPercentage(
       selectedUser.tokenUsage.used,
       selectedUser.tokenUsage.limit
     );
-
+ 
     return (
       <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
         <div className="bg-white rounded-2xl shadow-2xl w-full max-w-2xl overflow-hidden">
@@ -447,7 +391,7 @@ const AdminUsers = () => {
               </button>
             </div>
           </div>
-
+ 
           {/* Content */}
           <div className="p-6">
             {/* Usage Overview */}
@@ -494,7 +438,7 @@ const AdminUsers = () => {
                   </div>
                 </div>
               </div>
-
+ 
               <div className="flex-1 space-y-4">
                 <div className="grid grid-cols-3 gap-3">
                   <div className="p-3 bg-orange-50 rounded-xl border border-orange-100">
@@ -512,7 +456,7 @@ const AdminUsers = () => {
                     <p className="text-lg font-bold text-slate-800 mt-0.5">
                       {formatNumber(
                         selectedUser.tokenUsage.limit -
-                          selectedUser.tokenUsage.used
+                        selectedUser.tokenUsage.used
                       )}
                     </p>
                   </div>
@@ -525,22 +469,21 @@ const AdminUsers = () => {
                     </p>
                   </div>
                 </div>
-
+ 
                 <div className="w-full h-3 bg-gray-100 rounded-full overflow-hidden">
                   <div
-                    className={`h-full rounded-full transition-all duration-500 ${
-                      tokenPercentage >= 90
-                        ? "bg-red-500"
-                        : tokenPercentage >= 70
+                    className={`h-full rounded-full transition-all duration-500 ${tokenPercentage >= 90
+                      ? "bg-red-500"
+                      : tokenPercentage >= 70
                         ? "bg-amber-500"
                         : "bg-gradient-to-r from-orange-500 to-amber-500"
-                    }`}
+                      }`}
                     style={{ width: `${Math.min(tokenPercentage, 100)}%` }}
                   />
                 </div>
               </div>
             </div>
-
+ 
             {/* Usage History */}
             <div>
               <h4 className="font-semibold text-slate-700 mb-4 flex items-center gap-2">
@@ -583,7 +526,7 @@ const AdminUsers = () => {
               </div>
             </div>
           </div>
-
+ 
           {/* Footer */}
           <div className="flex items-center justify-end px-6 py-4 bg-gray-50 border-t border-gray-200">
             <button
@@ -600,106 +543,15 @@ const AdminUsers = () => {
       </div>
     );
   };
-
-  // Add User Modal
-  const AddUserModal = () => {
-    if (!showAddUserModal) return null;
-
-    return (
-      <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
-        <div className="bg-white rounded-2xl shadow-2xl w-full max-w-md overflow-hidden">
-          <div className="bg-gradient-to-r from-orange-500 to-amber-500 px-6 py-4">
-            <div className="flex items-center justify-between">
-              <div className="flex items-center gap-3">
-                <FaUserPlus className="text-white text-xl" />
-                <h3 className="text-lg font-bold text-white">Add New User</h3>
-              </div>
-              <button
-                onClick={() => {
-                  setShowAddUserModal(false);
-                  setNewUser({ name: "", email: "", password: "" });
-                }}
-                className="p-1.5 hover:bg-white/20 rounded-lg transition cursor-pointer"
-              >
-                <FaTimes className="text-white" />
-              </button>
-            </div>
-          </div>
-
-          <div className="p-6 space-y-4">
-            <div>
-              <label className="block text-sm font-medium text-slate-700 mb-1.5">
-                Full Name
-              </label>
-              <input
-                type="text"
-                value={newUser.name}
-                onChange={(e) =>
-                  setNewUser({ ...newUser, name: e.target.value })
-                }
-                placeholder="Enter full name"
-                className="w-full px-4 py-3 border-2 border-gray-200 rounded-xl focus:border-orange-500 focus:outline-none transition"
-              />
-            </div>
-            <div>
-              <label className="block text-sm font-medium text-slate-700 mb-1.5">
-                Email Address
-              </label>
-              <input
-                type="email"
-                value={newUser.email}
-                onChange={(e) =>
-                  setNewUser({ ...newUser, email: e.target.value })
-                }
-                placeholder="Enter email address"
-                className="w-full px-4 py-3 border-2 border-gray-200 rounded-xl focus:border-orange-500 focus:outline-none transition"
-              />
-            </div>
-            <div>
-              <label className="block text-sm font-medium text-slate-700 mb-1.5">
-                Password
-              </label>
-              <input
-                type="password"
-                value={newUser.password}
-                onChange={(e) =>
-                  setNewUser({ ...newUser, password: e.target.value })
-                }
-                placeholder="Enter password"
-                className="w-full px-4 py-3 border-2 border-gray-200 rounded-xl focus:border-orange-500 focus:outline-none transition"
-              />
-            </div>
-          </div>
-
-          <div className="flex items-center justify-end gap-3 px-6 py-4 bg-gray-50 border-t border-gray-200">
-            <button
-              onClick={() => {
-                setShowAddUserModal(false);
-                setNewUser({ name: "", email: "", password: "" });
-              }}
-              className="px-5 py-2.5 text-slate-600 hover:bg-gray-200 rounded-xl font-medium transition cursor-pointer"
-            >
-              Cancel
-            </button>
-            <button
-              onClick={handleAddUser}
-              className="flex items-center gap-2 px-5 py-2.5 bg-gradient-to-r from-orange-500 to-orange-600 text-white rounded-xl font-medium hover:from-orange-600 hover:to-orange-700 transition shadow-lg cursor-pointer"
-            >
-              <FaUserPlus />
-              Add User
-            </button>
-          </div>
-        </div>
-      </div>
-    );
-  };
-
+ 
+ 
+ 
   // Confirmation Modal
   const ConfirmModal = () => {
     if (!showConfirmModal) return null;
-
+ 
     const content = getConfirmModalContent();
-
+ 
     return (
       <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
         <div className="bg-white rounded-2xl shadow-2xl w-full max-w-md overflow-hidden">
@@ -712,7 +564,7 @@ const AdminUsers = () => {
             </h3>
             <p className="text-slate-600">{content.message}</p>
           </div>
-
+ 
           <div className="flex items-center justify-center gap-3 px-6 py-4 bg-gray-50 border-t border-gray-200">
             <button
               onClick={() => {
@@ -735,17 +587,18 @@ const AdminUsers = () => {
       </div>
     );
   };
-
+ 
   // View Details Modal
   const DetailsModal = () => {
+    // Modal for viewing user details
     if (!showDetailsModal || !selectedUser) return null;
-
+ 
     const badge = getStatusBadge(selectedUser.status);
     const tokenPercentage = getTokenPercentage(
       selectedUser.tokenUsage?.used || 0,
       selectedUser.tokenUsage?.limit || 10000
     );
-
+ 
     return (
       <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
         <div className="bg-white rounded-2xl shadow-2xl w-full max-w-2xl overflow-hidden">
@@ -779,7 +632,7 @@ const AdminUsers = () => {
               </button>
             </div>
           </div>
-
+ 
           {/* Content */}
           <div className="p-6 space-y-6">
             {/* User Info Grid */}
@@ -801,7 +654,7 @@ const AdminUsers = () => {
                   Last Active
                 </p>
                 <p className="font-semibold text-slate-800 mt-1">
-                 {new Date(selectedUser.joinDate * 1000).toLocaleDateString()}
+                  {new Date(selectedUser.joinDate * 1000).toLocaleDateString()}
                 </p>
               </div>
               <div className="p-4 bg-slate-50 rounded-xl">
@@ -811,7 +664,7 @@ const AdminUsers = () => {
                 </p>
               </div>
             </div>
-
+ 
             {/* Token Usage */}
             <div className="p-4 bg-orange-50 rounded-xl border border-orange-100">
               <div className="flex items-center justify-between mb-3">
@@ -825,13 +678,12 @@ const AdminUsers = () => {
               </div>
               <div className="w-full h-3 bg-orange-100 rounded-full overflow-hidden">
                 <div
-                  className={`h-full rounded-full ${
-                    tokenPercentage >= 90
-                      ? "bg-red-500"
-                      : tokenPercentage >= 70
+                  className={`h-full rounded-full ${tokenPercentage >= 90
+                    ? "bg-red-500"
+                    : tokenPercentage >= 70
                       ? "bg-amber-500"
                       : "bg-orange-500"
-                  }`}
+                    }`}
                   style={{ width: `${Math.min(tokenPercentage, 100)}%` }}
                 />
               </div>
@@ -840,7 +692,7 @@ const AdminUsers = () => {
               </p>
             </div>
           </div>
-
+ 
           {/* Footer */}
           <div className="flex items-center justify-end gap-3 px-6 py-4 bg-gray-50 border-t">
             <button
@@ -852,141 +704,15 @@ const AdminUsers = () => {
             >
               Close
             </button>
-            <button
-              onClick={() => {
-                setShowDetailsModal(false);
-                setEditUserData({
-                  name: selectedUser.name,
-                  email: selectedUser.email,
-                  role: selectedUser.role,
-                });
-                setShowEditModal(true);
-              }}
-              className="flex items-center gap-2 px-5 py-2.5 bg-gradient-to-r from-orange-500 to-orange-600 text-white rounded-xl font-medium hover:from-orange-600 hover:to-orange-700 transition cursor-pointer"
-            >
-              <FaEdit /> Edit User
-            </button>
+ 
           </div>
         </div>
       </div>
     );
   };
-
-  // Edit User Modal
-  const EditModal = () => {
-    if (!showEditModal || !selectedUser) return null;
-
-    const handleSaveUser = () => {
-      setUsers((prev) =>
-        prev.map((u) =>
-          u.id === selectedUser.id
-            ? {
-                ...u,
-                name: editUserData.name,
-                email: editUserData.email,
-                role: editUserData.role,
-              }
-            : u
-        )
-      );
-      toast.success(`User "${editUserData.name}" updated successfully!`);
-      setShowEditModal(false);
-      setSelectedUser(null);
-      setEditUserData({ name: "", email: "", role: "user" });
-    };
-
-    return (
-      <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
-        <div className="bg-white rounded-2xl shadow-2xl w-full max-w-md overflow-hidden">
-          {/* Header */}
-          <div className="bg-gradient-to-r from-blue-500 to-indigo-500 px-6 py-4">
-            <div className="flex items-center justify-between">
-              <div className="flex items-center gap-3">
-                <FaEdit className="text-white text-xl" />
-                <h3 className="text-lg font-bold text-white">Edit User</h3>
-              </div>
-              <button
-                onClick={() => {
-                  setShowEditModal(false);
-                  setSelectedUser(null);
-                  setEditUserData({ name: "", email: "", role: "user" });
-                }}
-                className="p-1.5 hover:bg-white/20 rounded-lg transition cursor-pointer"
-              >
-                <FaTimes className="text-white" />
-              </button>
-            </div>
-          </div>
-
-          {/* Form */}
-          <div className="p-6 space-y-4">
-            <div>
-              <label className="block text-sm font-medium text-slate-700 mb-1.5">
-                Full Name
-              </label>
-              <input
-                type="text"
-                value={editUserData.name}
-                onChange={(e) =>
-                  setEditUserData({ ...editUserData, name: e.target.value })
-                }
-                className="w-full px-4 py-3 border-2 border-gray-200 rounded-xl focus:border-blue-500 focus:outline-none transition"
-              />
-            </div>
-            <div>
-              <label className="block text-sm font-medium text-slate-700 mb-1.5">
-                Email Address
-              </label>
-              <input
-                type="email"
-                value={editUserData.email}
-                onChange={(e) =>
-                  setEditUserData({ ...editUserData, email: e.target.value })
-                }
-                className="w-full px-4 py-3 border-2 border-gray-200 rounded-xl focus:border-blue-500 focus:outline-none transition"
-              />
-            </div>
-            <div>
-              <label className="block text-sm font-medium text-slate-700 mb-1.5">
-                Role
-              </label>
-              <select
-                value={editUserData.role}
-                onChange={(e) =>
-                  setEditUserData({ ...editUserData, role: e.target.value })
-                }
-                className="w-full px-4 py-3 border-2 border-gray-200 rounded-xl focus:border-blue-500 focus:outline-none transition cursor-pointer"
-              >
-                <option value="user">User</option>
-                <option value="admin">Admin</option>
-              </select>
-            </div>
-          </div>
-
-          {/* Footer */}
-          <div className="flex items-center justify-end gap-3 px-6 py-4 bg-gray-50 border-t">
-            <button
-              onClick={() => {
-                setShowEditModal(false);
-                setSelectedUser(null);
-                setEditUserData({ name: "", email: "", role: "user" });
-              }}
-              className="px-5 py-2.5 text-slate-600 hover:bg-gray-200 rounded-xl font-medium transition cursor-pointer"
-            >
-              Cancel
-            </button>
-            <button
-              onClick={handleSaveUser}
-              className="flex items-center gap-2 px-5 py-2.5 bg-gradient-to-r from-blue-500 to-blue-600 text-white rounded-xl font-medium hover:from-blue-600 hover:to-blue-700 transition cursor-pointer"
-            >
-              Save Changes
-            </button>
-          </div>
-        </div>
-      </div>
-    );
-  };
-
+ 
+ 
+ 
   return (
     <div className="min-h-screen bg-slate-50">
       {/* Header */}
@@ -1009,16 +735,10 @@ const AdminUsers = () => {
               </p>
             </div>
           </div>
-          <button
-            onClick={() => setShowAddUserModal(true)}
-            className="flex items-center gap-2 px-5 py-2.5 bg-gradient-to-r from-orange-500 to-orange-600 text-white rounded-xl font-medium hover:from-orange-600 hover:to-orange-700 transition shadow-lg cursor-pointer"
-          >
-            <FaUserPlus />
-            Add User
-          </button>
+ 
         </div>
       </header>
-
+ 
       {/* Stats */}
       <div className="px-8 py-6">
         <div className="grid grid-cols-4 gap-4">
@@ -1090,7 +810,7 @@ const AdminUsers = () => {
           </div>
         </div>
       </div>
-
+ 
       {/* Filters */}
       <div className="bg-white border-y border-gray-200 px-8 py-4">
         <div className="flex flex-wrap items-center gap-4">
@@ -1105,7 +825,7 @@ const AdminUsers = () => {
               onChange={(e) => setSearchQuery(e.target.value)}
             />
           </div>
-
+ 
           {/* Status Filter */}
           <div className="relative">
             <select
@@ -1120,7 +840,7 @@ const AdminUsers = () => {
             </select>
             <FaChevronDown className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 pointer-events-none" />
           </div>
-
+ 
           {/* Sort */}
           <div className="flex items-center gap-2">
             <div className="relative">
@@ -1150,7 +870,7 @@ const AdminUsers = () => {
           </div>
         </div>
       </div>
-
+ 
       {/* Users Table */}
       <main className="p-8">
         {loading ? (
@@ -1182,7 +902,7 @@ const AdminUsers = () => {
               <div className="col-span-1">Status</div>
               <div className="col-span-1 text-center">Actions</div>
             </div>
-
+ 
             {/* Table Body */}
             <div className="divide-y divide-gray-100">
               {filteredUsers.map((user) => {
@@ -1210,7 +930,7 @@ const AdminUsers = () => {
                         </p>
                       </div>
                     </div>
-
+ 
                     {/* Email */}
                     <div className="col-span-2">
                       <div className="flex items-center gap-2 text-sm text-slate-600">
@@ -1218,7 +938,7 @@ const AdminUsers = () => {
                         <span className="truncate">{user.email}</span>
                       </div>
                     </div>
-
+ 
                     {/* Token Usage */}
                     <div className="col-span-2">
                       <button
@@ -1234,13 +954,12 @@ const AdminUsers = () => {
                         </div>
                         <div className="w-full h-1.5 bg-gray-100 rounded-full overflow-hidden">
                           <div
-                            className={`h-full rounded-full transition-all ${
-                              tokenPercentage >= 90
-                                ? "bg-red-500"
-                                : tokenPercentage >= 70
+                            className={`h-full rounded-full transition-all ${tokenPercentage >= 90
+                              ? "bg-red-500"
+                              : tokenPercentage >= 70
                                 ? "bg-amber-500"
                                 : "bg-gradient-to-r from-orange-500 to-amber-500"
-                            }`}
+                              }`}
                             style={{
                               width: `${Math.min(tokenPercentage, 100)}%`,
                             }}
@@ -1249,7 +968,7 @@ const AdminUsers = () => {
                         {/* <p className="text-xs text-slate-400 mt-0.5 group-hover:text-orange-500 transition">Click for details</p> */}
                       </button>
                     </div>
-
+ 
                     {/* Templates */}
                     <div className="col-span-1">
                       <div className="flex items-center gap-1.5 text-sm text-slate-600">
@@ -1259,7 +978,7 @@ const AdminUsers = () => {
                         </span>
                       </div>
                     </div>
-
+ 
                     {/* Joined */}
                     <div className="col-span-2">
                       <div className="flex items-center gap-2 text-sm text-slate-500">
@@ -1267,7 +986,7 @@ const AdminUsers = () => {
                         {new Date(user.joinDate * 1000).toLocaleDateString()}
                       </div>
                     </div>
-
+ 
                     {/* Status */}
                     <div className="col-span-1">
                       <span
@@ -1277,7 +996,7 @@ const AdminUsers = () => {
                         {badge.label}
                       </span>
                     </div>
-
+ 
                     {/* Actions - 3 dot menu */}
                     <div className="col-span-1 flex justify-center">
                       <ActionDropdown user={user} />
@@ -1288,7 +1007,7 @@ const AdminUsers = () => {
             </div>
           </div>
         )}
-
+ 
         {/* Results Count */}
         {!loading && filteredUsers.length > 0 && (
           <div className="mt-4 text-sm text-slate-500">
@@ -1302,31 +1021,31 @@ const AdminUsers = () => {
           </div>
         )}
       </main>
-
+ 
       {/* Modals */}
-      <AddUserModal />
+ 
       <ConfirmModal />
       <DetailsModal />
-      <EditModal />
-
+ 
+ 
       {/* Custom animation styles */}
-      <style jsx>{`
-        @keyframes fadeIn {
-          from {
-            opacity: 0;
-            transform: translateY(-10px);
-          }
-          to {
-            opacity: 1;
-            transform: translateY(0);
-          }
-        }
-        .animate-fadeIn {
-          animation: fadeIn 0.15s ease-out;
-        }
-      `}</style>
+      {/* Local ToastContainer to ensure visibility */}
+      <ToastContainer
+        position="top-right"
+        autoClose={3000}
+        hideProgressBar={false}
+        newestOnTop={false}
+        closeOnClick
+        rtl={false}
+        pauseOnFocusLoss
+        draggable
+        pauseOnHover
+        theme="colored"
+        style={{ zIndex: 99999 }}
+      />
     </div>
   );
 };
-
+ 
 export default AdminUsers;
+ 

@@ -18,13 +18,16 @@ import {
   FaArrowLeft,
 } from "react-icons/fa";
 import { toast } from "react-toastify";
-
+import ReactQuill from "react-quill";
+import "react-quill/dist/quill.snow.css";
+ 
 const AdminTemplates = () => {
   const navigate = useNavigate();
   const [searchParams, setSearchParams] = useSearchParams();
-
+ 
   const [templates, setTemplates] = useState([]);
   const [loading, setLoading] = useState(true);
+  const [saving, setSaving] = useState(false);
   const [searchQuery, setSearchQuery] = useState("");
   const [statusFilter, setStatusFilter] = useState(
     searchParams.get("status") || "all"
@@ -34,22 +37,21 @@ const AdminTemplates = () => {
   const [selectedTemplate, setSelectedTemplate] = useState(null);
   const [showPreviewModal, setShowPreviewModal] = useState(false);
   const [showEditModal, setShowEditModal] = useState(false);
-
-  // Edit form state - separate from selectedTemplate for smooth typing
+  const [rejectionReason, setRejectionReason] = useState("");
+  // Edit form state
   const [editContent, setEditContent] = useState("");
   const [editStatus, setEditStatus] = useState("");
-
-  // Ref for textarea to prevent scroll issues
-  const textareaRef = useRef(null);
-
+ 
+  const quillRef = useRef(null);
+ 
   useEffect(() => {
     fetchTemplates();
   }, [statusFilter, sortBy, sortOrder]);
-
+ 
   const fetchTemplates = async () => {
     try {
       setLoading(true);
-
+ 
       const res = await fetch(
         `${import.meta.env.VITE_BACKEND_URL}/templates/admin/templates/all`,
         {
@@ -58,29 +60,29 @@ const AdminTemplates = () => {
           },
         }
       );
-
+ 
       if (!res.ok) throw new Error("Failed to fetch templates");
-
+ 
       const data = await res.json();
-
+ 
       let fetched = data.templates || [];
-
+ 
       // Status filter
       if (statusFilter !== "all") {
         fetched = fetched.filter((t) => t.status === statusFilter);
       }
-
+ 
       // Sorting
       fetched.sort((a, b) => {
         let cmp = 0;
         if (sortBy === "date") {
-          cmp = b.uploadDate - a.uploadDate;
+          cmp = (b.uploadDate || 0) - (a.uploadDate || 0);
         } else if (sortBy === "title") {
-          cmp = a.title.localeCompare(b.title);
+          cmp = (a.title || "").localeCompare(b.title || "");
         }
         return sortOrder === "desc" ? cmp : -cmp;
       });
-
+ 
       setTemplates(fetched);
     } catch (err) {
       console.error("Admin template fetch error:", err);
@@ -89,6 +91,7 @@ const AdminTemplates = () => {
       setLoading(false);
     }
   };
+ 
   const fetchTemplateContent = async (templateId) => {
     const res = await fetch(
       `${import.meta.env.VITE_BACKEND_URL}/templates/view/${templateId}`,
@@ -98,109 +101,149 @@ const AdminTemplates = () => {
         },
       }
     );
-
+ 
     if (!res.ok) {
       throw new Error("Failed to fetch template content");
     }
-
+ 
     return await res.json();
   };
-
+ 
+  const openPreviewModal = async (template) => {
+    try {
+      setLoading(true);
+      const data = await fetchTemplateContent(template.id);
+ 
+      setSelectedTemplate({
+        ...template,
+        content: data.content,
+        edited: data.edited,
+      });
+      setShowPreviewModal(true);
+    } catch (err) {
+      console.error(err);
+      toast.error("Failed to load template content");
+    } finally {
+      setLoading(false);
+    }
+  };
+ 
   const openEditModal = async (template) => {
-  try {
-    setLoading(true);
-
-    const data = await fetchTemplateContent(template.id);
-
-    setSelectedTemplate({
-      ...template,
-      content: data.content,
-      edited: data.edited,
-    });
-
-    setEditContent(data.content);   // ✅ populate textarea
-    setEditStatus(template.status);
-    setShowEditModal(true);
-  } catch (err) {
-    console.error(err);
-    toast.error("Failed to load template for editing");
-  } finally {
-    setLoading(false);
-  }
-};
-
-
+    try {
+      setLoading(true);
+ 
+      const data = await fetchTemplateContent(template.id);
+ 
+      setSelectedTemplate({
+        ...template,
+        content: data.content,
+        edited: data.edited,
+      });
+ 
+      setEditContent(data.content);
+      setEditStatus(template.status);
+      setRejectionReason("");
+      setShowEditModal(true);
+    } catch (err) {
+      console.error(err);
+      toast.error("Failed to load template for editing");
+    } finally {
+      setLoading(false);
+    }
+  };
+ 
   const closeEditModal = () => {
     setShowEditModal(false);
     setSelectedTemplate(null);
     setEditContent("");
-    setEditStatus("");
+    setEditStatus("")
   };
-
+ 
+  const closePreviewModal = () => {
+    setShowPreviewModal(false);
+    setSelectedTemplate(null);
+  };
+ 
   const handleSaveTemplate = async () => {
     if (!selectedTemplate) return;
-
+ 
+    const authToken = localStorage.getItem("authToken");
+    if (!authToken) {
+      toast.error("Authentication token missing");
+      return;
+    }
+ 
+    // Get user ID from the template's user object
+    const userId = selectedTemplate.user?.id;
+    const templateId = selectedTemplate.id;
+ 
+    if (!userId || !templateId) {
+      console.error("Missing IDs:", { userId, templateId, selectedTemplate });
+      toast.error("Invalid user or template reference");
+      return;
+    }
+ 
+    // Validate status change
+    if (editStatus === selectedTemplate.status) {
+      toast.info("No status change detected");
+      return;
+    }
+ 
     try {
-      // API call to save edited content and status
-      // await fetch(`${import.meta.env.VITE_BACKEND_URL}/admin/templates/${selectedTemplate.id}`, {
-      //   method: 'PUT',
-      //   headers: {
-      //     Authorization: `Bearer ${localStorage.getItem("adminToken")}`,
-      //     'Content-Type': 'application/json'
-      //   },
-      //   body: JSON.stringify({ content: editContent, status: editStatus })
-      // });
-
-      setTemplates((prev) =>
-        prev.map((t) =>
-          t.id === selectedTemplate.id
-            ? {
-                ...t,
-                content: editContent,
-                status: editStatus,
-              }
-            : t
-        )
-      );
-
+      setSaving(true);
+ 
+      let endpoint = "";
+      let queryParams = new URLSearchParams({
+        user_id: userId,
+        template_id: templateId,
+      });
+ 
+      if (editStatus === "approved") {
+        endpoint = `${import.meta.env.VITE_BACKEND_URL}/templates/approve-template`;
+      } else if (editStatus === "rejected") {
+        endpoint = `${import.meta.env.VITE_BACKEND_URL}/templates/reject-template`;
+        queryParams.append("reason", "Admin Rejected");
+      } else {
+        toast.info("Please select a valid status (Approved or Rejected)");
+        return;
+      }
+ 
+      const res = await fetch(`${endpoint}?${queryParams.toString()}`, {
+        method: "POST",
+        headers: {
+          Authorization: `Bearer ${authToken}`,
+        },
+      });
+ 
+      const data = await res.json();
+ 
+      if (!res.ok) {
+        throw new Error(data.detail || `Failed to ${editStatus} template`);
+      }
+ 
+      if (editStatus === "approved") {
+        toast.success("Template approved successfully!");
+      } else {
+        toast.info("Template rejected");
+      }
+ 
       closeEditModal();
-
-      const statusMessages = {
-        approved: "Template approved and saved!",
-        rejected: "Template rejected and saved.",
-        pending: "Template saved with pending status.",
-      };
-
-      toast.success(
-        statusMessages[editStatus] || "Template saved successfully!"
-      );
-    } catch (error) {
-      console.error("Error saving template:", error);
-      toast.error("Failed to save template");
+      fetchTemplates(); // Refresh the list
+    } catch (err) {
+      console.error("Save template error:", err);
+      toast.error(err.message || "Failed to save template");
+    } finally {
+      setSaving(false);
     }
   };
-
-  // Handle textarea change without scroll jump
-  const handleContentChange = useCallback((e) => {
-    const textarea = e.target;
-    const scrollTop = textarea.scrollTop;
-    const selectionStart = textarea.selectionStart;
-    const selectionEnd = textarea.selectionEnd;
-
-    setEditContent(e.target.value);
-
-    // Restore scroll position and cursor after state update
-    requestAnimationFrame(() => {
-      if (textareaRef.current) {
-        textareaRef.current.scrollTop = scrollTop;
-        textareaRef.current.setSelectionRange(selectionStart, selectionEnd);
-      }
-    });
-  }, []);
-
+ 
+  const handleContentChange = (content) => {
+    setEditContent(content);
+  };
+ 
   const getStatusBadge = (status) => {
     const badges = {
-      active: {
+      approved: {
         bg: "bg-emerald-100",
         text: "text-emerald-700",
         border: "border-emerald-300",
@@ -224,13 +267,13 @@ const AdminTemplates = () => {
     };
     return badges[status] || badges.pending;
   };
-
+ 
   const filteredTemplates = templates.filter(
     (t) =>
-      t.title.toLowerCase().includes(searchQuery.toLowerCase()) ||
-      t.user.email.toLowerCase().includes(searchQuery.toLowerCase())
+      (t.title || "").toLowerCase().includes(searchQuery.toLowerCase()) ||
+      (t.user?.email || "").toLowerCase().includes(searchQuery.toLowerCase())
   );
-
+ 
   const statuses = [
     {
       value: "pending",
@@ -260,7 +303,7 @@ const AdminTemplates = () => {
       activeBg: "bg-red-100",
     },
   ];
-
+ 
   return (
     <div className="min-h-screen bg-slate-50">
       {/* Header */}
@@ -283,15 +326,9 @@ const AdminTemplates = () => {
               </p>
             </div>
           </div>
-          {/* <div className="flex items-center gap-3">
-                        <button className="flex items-center gap-2 px-4 py-2 text-slate-600 hover:bg-slate-100 rounded-xl transition cursor-pointer border border-slate-200">
-                            <FaDownload />
-                            <span>Export</span>
-                        </button>
-                    </div> */}
         </div>
       </header>
-
+ 
       {/* Filters Bar */}
       <div className="bg-white border-b border-gray-200 px-8 py-4">
         <div className="flex flex-wrap items-center gap-4">
@@ -306,7 +343,7 @@ const AdminTemplates = () => {
               onChange={(e) => setSearchQuery(e.target.value)}
             />
           </div>
-
+ 
           {/* Status Filter */}
           <div className="relative">
             <select
@@ -321,7 +358,7 @@ const AdminTemplates = () => {
             </select>
             <FaChevronDown className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 pointer-events-none" />
           </div>
-
+ 
           {/* Sort */}
           <div className="flex items-center gap-2">
             <div className="relative">
@@ -350,7 +387,7 @@ const AdminTemplates = () => {
           </div>
         </div>
       </div>
-
+ 
       {/* Templates Table */}
       <main className="p-8">
         {loading ? (
@@ -380,7 +417,7 @@ const AdminTemplates = () => {
               <div className="col-span-2">Status</div>
               <div className="col-span-1">Actions</div>
             </div>
-
+ 
             {/* Table Body */}
             <div className="divide-y divide-gray-100">
               {filteredTemplates.map((template) => {
@@ -404,24 +441,24 @@ const AdminTemplates = () => {
                         </p>
                       </div>
                     </div>
-
+ 
                     {/* User */}
                     <div className="col-span-3">
                       <div className="flex items-center gap-2">
                         <div className="w-8 h-8 rounded-full bg-gradient-to-br from-orange-400 to-amber-500 flex items-center justify-center text-white text-xs font-bold">
-                          {template.user.name.charAt(0)}
+                          {(template.user?.name || "U").charAt(0)}
                         </div>
                         <div>
                           <p className="text-sm font-medium text-slate-700">
-                            {template.user.name}
+                            {template.user?.name || "Unknown"}
                           </p>
                           <p className="text-xs text-slate-500 truncate">
-                            {template.user.email}
+                            {template.user?.email || "—"}
                           </p>
                         </div>
                       </div>
                     </div>
-
+ 
                     {/* Date */}
                     <div className="col-span-2">
                       <div className="flex items-center gap-2 text-sm text-slate-500">
@@ -433,7 +470,7 @@ const AdminTemplates = () => {
                           : "—"}
                       </div>
                     </div>
-
+ 
                     {/* Status */}
                     <div className="col-span-2">
                       <span
@@ -443,46 +480,24 @@ const AdminTemplates = () => {
                         {badge.label}
                       </span>
                     </div>
-
+ 
                     {/* Actions */}
                     <div className="col-span-1 flex items-center gap-1">
                       <button
-                        onClick={async () => {
-                          try {
-                            setLoading(true);
-
-                            const data = await fetchTemplateContent(
-                              template.id
-                            );
-
-                            setSelectedTemplate({
-                              ...template,
-                              content: data.content, // ✅ backend HTML/text
-                              edited: data.edited,
-                            });
-
-                            setShowPreviewModal(true);
-                          } catch (err) {
-                            console.error(err);
-                            toast.error("Failed to load template content");
-                          } finally {
-                            setLoading(false);
-                          }
-                        }}
+                        onClick={() => openPreviewModal(template)}
                         className="p-2 hover:bg-orange-100 text-orange-600 rounded-lg transition cursor-pointer"
                         title="View Template"
                       >
                         <FaEye />
                       </button>
-
+ 
                       <button
-  onClick={() => openEditModal(template)}
-  className="p-2 hover:bg-slate-100 text-slate-600 rounded-lg transition cursor-pointer"
-  title="Edit Template"
->
-  <FaEdit />
-</button>
-
+                        onClick={() => openEditModal(template)}
+                        className="p-2 hover:bg-slate-100 text-slate-600 rounded-lg transition cursor-pointer"
+                        title="Edit Template"
+                      >
+                        <FaEdit />
+                      </button>
                     </div>
                   </div>
                 );
@@ -490,7 +505,7 @@ const AdminTemplates = () => {
             </div>
           </div>
         )}
-
+ 
         {/* Results Count */}
         {!loading && filteredTemplates.length > 0 && (
           <div className="mt-4 text-sm text-slate-500">
@@ -506,7 +521,7 @@ const AdminTemplates = () => {
           </div>
         )}
       </main>
-
+ 
       {/* Preview Modal */}
       {showPreviewModal && selectedTemplate && (
         <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
@@ -523,30 +538,27 @@ const AdminTemplates = () => {
                   </p>
                 </div>
                 <button
-                  onClick={() => {
-                    setShowPreviewModal(false);
-                    setSelectedTemplate(null);
-                  }}
+                  onClick={closePreviewModal}
                   className="p-2 hover:bg-white/20 rounded-lg transition cursor-pointer"
                 >
                   <FaTimes className="text-white text-xl" />
                 </button>
               </div>
             </div>
-
+ 
             {/* Modal Body */}
             <div className="flex-1 overflow-y-auto p-6">
               {/* Template Info */}
-              <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-6">
+              <div className="grid grid-cols-2 md:grid-cols-3 gap-4 mb-6">
                 <div className="p-4 bg-orange-50 rounded-xl border border-orange-100">
                   <p className="text-xs text-orange-600 font-medium">
                     Submitted By
                   </p>
                   <p className="font-semibold text-slate-800 mt-1">
-                    {selectedTemplate.user.name}
+                    {selectedTemplate.user?.name || "Unknown"}
                   </p>
                   <p className="text-xs text-slate-500">
-                    {selectedTemplate.user.email}
+                    {selectedTemplate.user?.email || "—"}
                   </p>
                 </div>
                 <div className="p-4 bg-slate-50 rounded-xl border border-slate-100">
@@ -561,20 +573,16 @@ const AdminTemplates = () => {
                       : "—"}
                   </p>
                 </div>
-                {/* <div className="p-4 bg-slate-50 rounded-xl border border-slate-100">
-                                    <p className="text-xs text-slate-500 font-medium">Category</p>
-                                    <p className="font-semibold text-slate-800 mt-1">{selectedTemplate.category}</p>
-                                </div> */}
                 <div className="p-4 bg-slate-50 rounded-xl border border-slate-100">
                   <p className="text-xs text-slate-500 font-medium">
                     Downloads
                   </p>
                   <p className="font-semibold text-slate-800 mt-1">
-                    {selectedTemplate.downloads}
+                    {selectedTemplate.downloads || 0}
                   </p>
                 </div>
               </div>
-
+ 
               {/* Template Content Preview */}
               <div className="border-2 border-gray-200 rounded-xl p-6 bg-gray-50">
                 <h4 className="font-semibold text-slate-700 mb-4 flex items-center gap-2">
@@ -583,16 +591,16 @@ const AdminTemplates = () => {
                 </h4>
                 <div className="bg-white p-4 rounded-lg border border-gray-200 max-h-64 overflow-y-auto">
                   <div
-  className="prose max-w-none text-sm"
-  dangerouslySetInnerHTML={{
-    __html: selectedTemplate.content || "<p>No content available.</p>",
-  }}
-/>
-
+                    className="prose max-w-none text-sm"
+                    dangerouslySetInnerHTML={{
+                      __html:
+                        selectedTemplate.content || "<p>No content available.</p>",
+                    }}
+                  />
                 </div>
               </div>
             </div>
-
+ 
             {/* Modal Footer */}
             <div className="flex items-center justify-between px-6 py-4 border-t border-gray-200 bg-gray-50 flex-shrink-0">
               <div className="flex items-center gap-3">
@@ -613,7 +621,7 @@ const AdminTemplates = () => {
               </div>
               <button
                 onClick={() => {
-                  setShowPreviewModal(false);
+                  closePreviewModal();
                   openEditModal(selectedTemplate);
                 }}
                 className="flex items-center gap-2 px-5 py-2.5 bg-gradient-to-r from-orange-500 to-orange-600 text-white rounded-xl font-medium hover:from-orange-600 hover:to-orange-700 transition cursor-pointer shadow-lg"
@@ -625,8 +633,8 @@ const AdminTemplates = () => {
           </div>
         </div>
       )}
-
-      {/* Edit Modal */}
+ 
+      {/* Edit Modal - FIXED STRUCTURE */}
       {showEditModal && selectedTemplate && (
         <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
           <div className="bg-white rounded-2xl shadow-2xl w-full max-w-5xl max-h-[90vh] overflow-hidden flex flex-col">
@@ -634,9 +642,7 @@ const AdminTemplates = () => {
             <div className="bg-gradient-to-r from-orange-500 to-amber-500 px-6 py-4 flex-shrink-0">
               <div className="flex items-center justify-between">
                 <div>
-                  <h3 className="text-xl font-bold text-white">
-                    Edit Template
-                  </h3>
+                  <h3 className="text-xl font-bold text-white">Edit Template</h3>
                   <p className="text-orange-100 text-sm">
                     {selectedTemplate.title}
                   </p>
@@ -649,8 +655,8 @@ const AdminTemplates = () => {
                 </button>
               </div>
             </div>
-
-            {/* Content */}
+ 
+            {/* Content - Scrollable */}
             <div className="flex-1 overflow-y-auto p-6">
               {/* Template Info */}
               <div className="grid grid-cols-2 md:grid-cols-3 gap-4 mb-6">
@@ -659,10 +665,10 @@ const AdminTemplates = () => {
                     Submitted By
                   </p>
                   <p className="font-semibold text-slate-800 mt-1">
-                    {selectedTemplate.user.name}
+                    {selectedTemplate.user?.name || "Unknown"}
                   </p>
                   <p className="text-xs text-slate-500">
-                    {selectedTemplate.user.email}
+                    {selectedTemplate.user?.email || "—"}
                   </p>
                 </div>
                 <div className="p-4 bg-slate-50 rounded-xl border border-slate-100">
@@ -670,35 +676,38 @@ const AdminTemplates = () => {
                     Submission Date
                   </p>
                   <p className="font-semibold text-slate-800 mt-1">
-                    {new Date(selectedTemplate.uploadDate).toLocaleDateString()}
+                    {selectedTemplate.uploadDate
+                      ? new Date(
+                          selectedTemplate.uploadDate * 1000
+                        ).toLocaleDateString()
+                      : "—"}
                   </p>
                 </div>
-                {/* <div className="p-4 bg-slate-50 rounded-xl border border-slate-100">
-                                    <p className="text-xs text-slate-500 font-medium">Category</p>
-                                    <p className="font-semibold text-slate-800 mt-1">{selectedTemplate.category}</p>
-                                </div> */}
                 <div className="p-4 bg-slate-50 rounded-xl border border-slate-100">
-                  <p className="text-xs text-slate-500 font-medium">
-                    Downloads
-                  </p>
+                  <p className="text-xs text-slate-500 font-medium">Downloads</p>
                   <p className="font-semibold text-slate-800 mt-1">
-                    {selectedTemplate.downloads}
+                    {selectedTemplate.downloads || 0}
                   </p>
                 </div>
               </div>
-
+ 
               {/* Status Selection */}
               <div className="mb-6">
                 <label className="block text-sm font-semibold text-slate-700 mb-3">
                   Template Status
                 </label>
-                <div className="flex gap-3">
+                <div className="flex gap-3 flex-wrap">
                   {statuses.map((status) => (
                     <button
                       key={status.value}
                       type="button"
                       onClick={() => setEditStatus(status.value)}
-                      className={`flex items-center gap-2 px-4 py-2.5 rounded-xl border-2 transition-all cursor-pointer font-medium ${
+                      disabled={status.value === "pending"}
+                      className={`flex items-center gap-2 px-4 py-2.5 rounded-xl border-2 transition-all font-medium ${
+                        status.value === "pending"
+                          ? "opacity-50 cursor-not-allowed"
+                          : "cursor-pointer"
+                      } ${
                         editStatus === status.value
                           ? `${status.borderColor} ${status.activeBg} ${status.textColor}`
                           : "border-gray-200 hover:border-gray-300 text-slate-600 hover:bg-gray-50"
@@ -723,27 +732,35 @@ const AdminTemplates = () => {
                   ))}
                 </div>
               </div>
-
+ 
+ 
               {/* Template Content Editor */}
               <div>
                 <label className="block text-sm font-semibold text-slate-700 mb-3">
                   Template Content
                 </label>
-                <textarea
-                  ref={textareaRef}
-                  value={editContent}
-                  onChange={handleContentChange}
-                  className="w-full h-80 p-4 border-2 border-gray-200 rounded-xl focus:border-orange-500 focus:outline-none resize-none font-mono text-sm text-slate-700 leading-relaxed"
-                  placeholder="Edit template content..."
-                  spellCheck="false"
-                  autoComplete="off"
-                  autoCorrect="off"
-                  autoCapitalize="off"
-                />
+                <div className="border rounded-xl overflow-hidden">
+                  <ReactQuill
+                    ref={quillRef}
+                    theme="snow"
+                    value={editContent}
+                    onChange={handleContentChange}
+                    className="bg-white"
+                    style={{ minHeight: "200px" }}
+                    modules={{
+                      toolbar: [
+                        [{ header: [1, 2, 3, false] }],
+                        ["bold", "italic", "underline", "strike"],
+                        [{ list: "ordered" }, { list: "bullet" }],
+                        ["link", "clean"],
+                      ],
+                    }}
+                  />
+                </div>
               </div>
             </div>
-
-            {/* Footer */}
+ 
+            {/* Footer - INSIDE THE MODAL */}
             <div className="flex items-center justify-between px-6 py-4 bg-gray-50 border-t border-gray-200 flex-shrink-0">
               <div className="text-sm text-slate-500">
                 <span className="font-medium">Tip:</span> Review and edit the
@@ -752,24 +769,36 @@ const AdminTemplates = () => {
               <div className="flex gap-3">
                 <button
                   onClick={closeEditModal}
-                  className="px-5 py-2.5 text-slate-600 hover:bg-gray-200 rounded-xl font-medium transition cursor-pointer"
+                  disabled={saving}
+                  className="px-5 py-2.5 text-slate-600 hover:bg-gray-200 rounded-xl font-medium transition cursor-pointer disabled:opacity-50"
                 >
                   Cancel
                 </button>
                 <button
                   onClick={handleSaveTemplate}
-                  className="flex items-center gap-2 px-6 py-2.5 bg-gradient-to-r from-orange-500 to-orange-600 text-white rounded-xl font-medium hover:from-orange-600 hover:to-orange-700 transition shadow-lg cursor-pointer"
+                  disabled={saving || editStatus === "pending"}
+                  className="flex items-center gap-2 px-6 py-2.5 bg-gradient-to-r from-orange-500 to-orange-600 text-white rounded-xl font-medium hover:from-orange-600 hover:to-orange-700 transition shadow-lg cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed"
                 >
-                  <FaSave />
-                  Save Template
+                  {saving ? (
+                    <>
+                      <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin" />
+                      Saving...
+                    </>
+                  ) : (
+                    <>
+                      <FaSave />
+                      Save Template
+                    </>
+                  )}
                 </button>
               </div>
             </div>
           </div>
         </div>
-      )}
+      )}  
     </div>
   );
 };
-
+ 
 export default AdminTemplates;
+ 
