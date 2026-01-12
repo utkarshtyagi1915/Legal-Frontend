@@ -273,57 +273,12 @@ const LegalAssistant = () => {
   const threadRef = useRef(null);
   const abortRef = useRef(null);
   const streamTimersRef = useRef({});
+  const wasEditingRef = useRef(false);
 
   const backendUrl = `${import.meta.env.VITE_BACKEND_URL}/query`;
   const downloadBaseUrl = `${import.meta.env.VITE_BACKEND_URL}/files/`;
   const API_BASE = import.meta.env.VITE_BACKEND_URL;
 
-  // Fetch user data on component mount
-  useEffect(() => {
-    const fetchUserData = async () => {
-      try {
-        const token = localStorage.getItem("authToken");
-        const savedEmail = localStorage.getItem("Email");
-        const savedImage = localStorage.getItem("profileImage");
-
-        // Set initial data from localStorage
-        setUserData({
-          email: savedEmail || "Guest",
-          profileImage: savedImage || null
-        });
-
-        // Try to fetch fresh data from API if token exists
-        if (token) {
-          const res = await fetch(`${API_BASE}/user/profile`, {
-            headers: { Authorization: `Bearer ${token}` }
-          });
-
-          if (res.ok) {
-            const data = await res.json();
-            setUserData({
-              email: data.email || savedEmail || "Guest",
-              profileImage: data.profileImage || savedImage || null
-            });
-
-            // Update localStorage
-            if (data.email) localStorage.setItem("Email", data.email);
-            if (data.profileImage) localStorage.setItem("profileImage", data.profileImage);
-          }
-        }
-      } catch (error) {
-        console.error("Error fetching user data:", error);
-        // Use localStorage data as fallback
-        const savedEmail = localStorage.getItem("Email") || "Guest";
-        const savedImage = localStorage.getItem("profileImage") || null;
-        setUserData({
-          email: savedEmail,
-          profileImage: savedImage
-        });
-      }
-    };
-
-    fetchUserData();
-  }, [API_BASE]);
 
   // Get user profile image or show initials in a gradient circle
   const getUserAvatar = () => {
@@ -752,6 +707,20 @@ const LegalAssistant = () => {
   };
 
   useEffect(() => {
+    // Don't auto-scroll if user is editing a message
+    const isEditing = messages.some((m) => m.editing);
+
+    // Skip scroll if we just finished editing (save/cancel was clicked)
+    if (wasEditingRef.current && !isEditing) {
+      wasEditingRef.current = false;
+      return;
+    }
+
+    // Track current editing state for next render
+    wasEditingRef.current = isEditing;
+
+    if (isEditing) return;
+
     scrollRef.current?.scrollIntoView({ behavior: "smooth" });
   }, [messages]);
 
@@ -826,10 +795,10 @@ const LegalAssistant = () => {
                   }`}
               >
                 <div
-                  className={`relative px-5 py-4 rounded-2xl shadow-sm border min-h-[60px] ${msg.type === "user"
+                  className={`relative px-5 py-4 rounded-2xl shadow-sm border ${msg.type === "user"
                     ? "bg-gradient-to-r from-orange-50 to-amber-50 border-orange-200"
                     : "bg-white border-gray-200 shadow-md"
-                    } ${msg.editing ? "min-w-[500px]" : ""} ${msg.resending ? "border-2 border-orange-300 animate-pulse" : ""
+                    } ${msg.editing ? "min-w-[900px] min-h-[400px]" : ""} ${msg.resending ? "border-2 border-orange-300 animate-pulse" : ""
                     }`}
                 >
                   {/* Action Buttons - top right */}
@@ -962,6 +931,7 @@ const LegalAssistant = () => {
                         style={{
                           width: '100%',
                           minWidth: '400px',
+                          minHeight: '400px',
                           boxSizing: 'border-box'
                         }}
                         autoFocus
@@ -969,7 +939,7 @@ const LegalAssistant = () => {
                       <div className="flex gap-2 justify-end">
                         <button
                           onClick={() => saveAndResendEditMessage(msg.id)}
-                          className="px-4 py-2 rounded-lg bg-gradient-to-r from-orange-500 to-amber-500 text-white text-sm hover:from-orange-600 hover:to-amber-600 transition-all duration-300 flex items-center gap-2 shadow-md hover:shadow-lg"
+                          className="cursor-pointer px-4 py-2 rounded-lg bg-gradient-to-r from-orange-500 to-amber-500 text-white text-sm hover:from-orange-600 hover:to-amber-600 transition-all duration-300 flex items-center gap-2 shadow-md hover:shadow-lg"
                         >
                           {msg.type === "user" ? (
                             <>
@@ -987,7 +957,7 @@ const LegalAssistant = () => {
                         </button>
                         <button
                           onClick={() => cancelEditMessage(msg.id)}
-                          className="px-4 py-2 rounded-lg bg-gray-100 text-gray-700 text-sm hover:bg-gray-200 transition-colors"
+                          className="cursor-pointer px-4 py-2 rounded-lg bg-gray-100 text-gray-700 text-sm hover:bg-gray-200 transition-colors"
                         >
                           Cancel
                         </button>

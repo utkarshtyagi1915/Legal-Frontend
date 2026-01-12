@@ -159,23 +159,40 @@ useEffect(() => {
     fetchThreads();
   }, []);
 
-
-  // Load data from localStorage
   useEffect(() => {
-    // Load uploaded templates (user's own templates)
-    const uploadedTemplates =
-      JSON.parse(localStorage.getItem("uploadedTemplates")) || [];
-    const processedTemplates = uploadedTemplates.map((t) => ({
-      ...t,
-      status: t.status || "pending",
-    }));
-    setTemplates(processedTemplates);
+  const fetchTemplates = async () => {
+    try {
+      const res = await fetch(
+        `${import.meta.env.VITE_BACKEND_URL}/templates/list`,
+        {
+          headers: {
+            Authorization: `Bearer ${localStorage.getItem("authToken")}`,
+          },
+        }
+      );
 
-    // Load recent downloads
-    const savedDownloads =
-      JSON.parse(localStorage.getItem("lexi_downloads")) || [];
-    setRecentDownloads(savedDownloads);
-  }, []);
+      if (!res.ok) throw new Error("Failed to fetch templates");
+
+      const data = await res.json();
+
+      // Normalize backend templates → dashboard format
+      const mappedTemplates = (data.templates || []).map((t) => ({
+        id: t.template_id,
+        title: t.file_name,
+        uploadedAt: t.uploaded_at,
+        status: t.status,
+        source: t.source, // "admin" | "user"
+      }));
+
+      setTemplates(mappedTemplates);
+    } catch (err) {
+      console.error("Template fetch error:", err);
+    }
+  };
+
+  fetchTemplates();
+}, []);
+
 
   // Stats calculations
   const stats = {

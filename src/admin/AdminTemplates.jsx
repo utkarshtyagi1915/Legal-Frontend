@@ -16,10 +16,16 @@ import {
   FaTimes,
   FaSave,
   FaArrowLeft,
+  FaPlus,
+  FaCloudUploadAlt,
+  FaFile,
+  FaTrash,
 } from "react-icons/fa";
 import { toast } from "react-toastify";
 import ReactQuill from "react-quill";
 import "react-quill/dist/quill.snow.css";
+ 
+const API_BASE = import.meta.env.VITE_BACKEND_URL;
  
 const AdminTemplates = () => {
   const navigate = useNavigate();
@@ -38,9 +44,19 @@ const AdminTemplates = () => {
   const [showPreviewModal, setShowPreviewModal] = useState(false);
   const [showEditModal, setShowEditModal] = useState(false);
   const [rejectionReason, setRejectionReason] = useState("");
+ 
   // Edit form state
   const [editContent, setEditContent] = useState("");
   const [editStatus, setEditStatus] = useState("");
+ 
+  // ============================================================
+  // ADD TEMPLATE MODAL STATE
+  // ============================================================
+  const [showAddModal, setShowAddModal] = useState(false);
+  const [uploadFile, setUploadFile] = useState(null);
+  const [uploading, setUploading] = useState(false);
+  const [dragActive, setDragActive] = useState(false);
+  const fileInputRef = useRef(null);
  
   const quillRef = useRef(null);
  
@@ -52,14 +68,11 @@ const AdminTemplates = () => {
     try {
       setLoading(true);
  
-      const res = await fetch(
-        `${import.meta.env.VITE_BACKEND_URL}/templates/admin/templates/all`,
-        {
-          headers: {
-            Authorization: `Bearer ${localStorage.getItem("authToken")}`,
-          },
-        }
-      );
+      const res = await fetch(`${API_BASE}/templates/admin/templates/all`, {
+        headers: {
+          Authorization: `Bearer ${localStorage.getItem("authToken")}`,
+        },
+      });
  
       if (!res.ok) throw new Error("Failed to fetch templates");
  
@@ -92,27 +105,42 @@ const AdminTemplates = () => {
     }
   };
  
-  const fetchTemplateContent = async (templateId) => {
-    const res = await fetch(
-      `${import.meta.env.VITE_BACKEND_URL}/templates/view/${templateId}`,
-      {
-        headers: {
-          Authorization: `Bearer ${localStorage.getItem("authToken")}`,
-        },
-      }
-    );
- 
-    if (!res.ok) {
-      throw new Error("Failed to fetch template content");
-    }
- 
-    return await res.json();
-  };
+  const fetchTemplateContent = async (templateId, editedByUserId = null) => {
+  const token = localStorage.getItem("authToken");
+
+  if (!token) {
+    throw new Error("Not authenticated");
+  }
+
+  let url = `${API_BASE}/templates/view/${templateId}`;
+
+  // 👑 Admin viewing a user's edited template
+  if (editedByUserId) {
+    url += `?edited_by_user_id=${editedByUserId}`;
+  }
+
+  const res = await fetch(url, {
+    headers: {
+      Authorization: `Bearer ${token}`,
+    },
+  });
+
+  if (!res.ok) {
+    const text = await res.text();
+    throw new Error(text || "Failed to fetch template content");
+  }
+
+  return await res.json();
+};
+
  
   const openPreviewModal = async (template) => {
     try {
       setLoading(true);
-      const data = await fetchTemplateContent(template.id);
+      const data = await fetchTemplateContent(
+  template.id,
+  template.user?.id || null
+);
  
       setSelectedTemplate({
         ...template,
@@ -132,7 +160,10 @@ const AdminTemplates = () => {
     try {
       setLoading(true);
  
-      const data = await fetchTemplateContent(template.id);
+      const data = await fetchTemplateContent(
+  template.id,
+  template.user?.id || null
+);
  
       setSelectedTemplate({
         ...template,
@@ -156,12 +187,133 @@ const AdminTemplates = () => {
     setShowEditModal(false);
     setSelectedTemplate(null);
     setEditContent("");
-    setEditStatus("")
+    setEditStatus("");
   };
  
   const closePreviewModal = () => {
     setShowPreviewModal(false);
     setSelectedTemplate(null);
+  };
+ 
+  // ============================================================
+  // ADD TEMPLATE MODAL FUNCTIONS
+  // ============================================================
+  const openAddModal = () => {
+    setShowAddModal(true);
+    setUploadFile(null);
+  };
+ 
+  const closeAddModal = () => {
+    setShowAddModal(false);
+    setUploadFile(null);
+    setDragActive(false);
+  };
+ 
+  const handleDrag = (e) => {
+    e.preventDefault();
+    e.stopPropagation();
+    if (e.type === "dragenter" || e.type === "dragover") {
+      setDragActive(true);
+    } else if (e.type === "dragleave") {
+      setDragActive(false);
+    }
+  };
+ 
+  const handleDrop = (e) => {
+    e.preventDefault();
+    e.stopPropagation();
+    setDragActive(false);
+ 
+    if (e.dataTransfer.files && e.dataTransfer.files[0]) {
+      handleFileSelect(e.dataTransfer.files[0]);
+    }
+  };
+ 
+  const handleFileSelect = (file) => {
+    const allowedTypes = [
+      "application/pdf",
+      "application/msword",
+      "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+      "text/plain",
+    ];
+ 
+    if (!allowedTypes.includes(file.type)) {
+      toast.error("Please upload a PDF, DOC, DOCX, or TXT file");
+      return;
+    }
+ 
+    if (file.size > 10 * 1024 * 1024) {
+      toast.error("File size must be less than 10MB");
+      return;
+    }
+ 
+    setUploadFile(file);
+  };
+ 
+  const handleFileInputChange = (e) => {
+    if (e.target.files && e.target.files[0]) {
+      handleFileSelect(e.target.files[0]);
+    }
+  };
+ 
+  const handleUploadTemplate = async () => {
+    if (!uploadFile) {
+      toast.error("Please select a file to upload");
+      return;
+    }
+ 
+    try {
+      setUploading(true);
+ 
+      const formData = new FormData();
+      formData.append("file", uploadFile);
+ 
+      const res = await fetch(`${API_BASE}/templates/upload`, {
+        method: "POST",
+        headers: {
+          Authorization: `Bearer ${localStorage.getItem("authToken")}`,
+        },
+        body: formData,
+      });
+ 
+      const data = await res.json();
+ 
+      if (!res.ok) {
+        throw new Error(data.detail || "Failed to upload template");
+      }
+ 
+      toast.success("Template uploaded successfully!");
+      closeAddModal();
+      fetchTemplates(); // Refresh the list
+    } catch (err) {
+      console.error("Upload error:", err);
+      toast.error(err.message || "Failed to upload template");
+    } finally {
+      setUploading(false);
+    }
+  };
+ 
+  const removeSelectedFile = () => {
+    setUploadFile(null);
+    if (fileInputRef.current) {
+      fileInputRef.current.value = "";
+    }
+  };
+ 
+  const getFileIcon = (fileName) => {
+    const ext = fileName?.split(".").pop()?.toLowerCase();
+    if (ext === "pdf") return "📄";
+    if (ext === "doc" || ext === "docx") return "📝";
+    if (ext === "txt") return "📃";
+    return "📁";
+  };
+ 
+  const formatFileSize = (bytes) => {
+    if (bytes === 0) return "0 Bytes";
+    const k = 1024;
+    const sizes = ["Bytes", "KB", "MB", "GB"];
+    const i = Math.floor(Math.log(bytes) / Math.log(k));
+    return parseFloat((bytes / Math.pow(k, i)).toFixed(2)) + " " + sizes[i];
   };
  
   const handleSaveTemplate = async () => {
@@ -173,7 +325,6 @@ const AdminTemplates = () => {
       return;
     }
  
-    // Get user ID from the template's user object
     const userId = selectedTemplate.user?.id;
     const templateId = selectedTemplate.id;
  
@@ -183,7 +334,6 @@ const AdminTemplates = () => {
       return;
     }
  
-    // Validate status change
     if (editStatus === selectedTemplate.status) {
       toast.info("No status change detected");
       return;
@@ -199,10 +349,10 @@ const AdminTemplates = () => {
       });
  
       if (editStatus === "approved") {
-        endpoint = `${import.meta.env.VITE_BACKEND_URL}/templates/approve-template`;
+        endpoint = `${API_BASE}/templates/approve-template`;
       } else if (editStatus === "rejected") {
-        endpoint = `${import.meta.env.VITE_BACKEND_URL}/templates/reject-template`;
-        queryParams.append("reason", "Admin Rejected");
+        endpoint = `${API_BASE}/templates/reject-template`;
+        queryParams.append("reason", rejectionReason || "Admin Rejected");
       } else {
         toast.info("Please select a valid status (Approved or Rejected)");
         return;
@@ -228,7 +378,7 @@ const AdminTemplates = () => {
       }
  
       closeEditModal();
-      fetchTemplates(); // Refresh the list
+      fetchTemplates();
     } catch (err) {
       console.error("Save template error:", err);
       toast.error(err.message || "Failed to save template");
@@ -304,6 +454,14 @@ const AdminTemplates = () => {
     },
   ];
  
+  // Stats for header
+  const templateStats = {
+    total: templates.length,
+    pending: templates.filter((t) => t.status === "pending").length,
+    approved: templates.filter((t) => t.status === "approved").length,
+    rejected: templates.filter((t) => t.status === "rejected").length,
+  };
+ 
   return (
     <div className="min-h-screen bg-slate-50">
       {/* Header */}
@@ -325,6 +483,34 @@ const AdminTemplates = () => {
                 Review, edit, and manage all user-submitted templates
               </p>
             </div>
+          </div>
+ 
+          {/* Stats + Add Button */}
+          <div className="flex items-center gap-4">
+            {/* Quick Stats */}
+            <div className="hidden md:flex items-center gap-3">
+              <div className="px-3 py-1.5 bg-slate-100 rounded-lg text-sm">
+                <span className="text-slate-500">Total:</span>{" "}
+                <span className="font-bold text-slate-700">{templateStats.total}</span>
+              </div>
+              <div className="px-3 py-1.5 bg-orange-50 rounded-lg text-sm">
+                <span className="text-orange-500">Pending:</span>{" "}
+                <span className="font-bold text-orange-600">{templateStats.pending}</span>
+              </div>
+              <div className="px-3 py-1.5 bg-emerald-50 rounded-lg text-sm">
+                <span className="text-emerald-500">Approved:</span>{" "}
+                <span className="font-bold text-emerald-600">{templateStats.approved}</span>
+              </div>
+            </div>
+ 
+            {/* ADD TEMPLATE BUTTON */}
+            <button
+              onClick={openAddModal}
+              className="flex items-center gap-2 px-5 py-2.5 bg-gradient-to-r from-orange-500 to-amber-500 hover:from-orange-600 hover:to-amber-600 text-white rounded-xl font-medium transition-all shadow-lg hover:shadow-orange-200 cursor-pointer"
+            >
+              <FaPlus className="text-sm" />
+              Add Template
+            </button>
           </div>
         </div>
       </header>
@@ -403,9 +589,16 @@ const AdminTemplates = () => {
             <h3 className="text-lg font-semibold text-slate-700">
               No templates found
             </h3>
-            <p className="text-slate-500 mt-1">
+            <p className="text-slate-500 mt-1 mb-4">
               Try adjusting your search or filter criteria
             </p>
+            <button
+              onClick={openAddModal}
+              className="inline-flex items-center gap-2 px-5 py-2.5 bg-gradient-to-r from-orange-500 to-amber-500 text-white rounded-xl font-medium hover:from-orange-600 hover:to-amber-600 transition cursor-pointer"
+            >
+              <FaPlus />
+              Add First Template
+            </button>
           </div>
         ) : (
           <div className="bg-white rounded-2xl shadow-sm border border-gray-100 overflow-hidden">
@@ -522,6 +715,141 @@ const AdminTemplates = () => {
         )}
       </main>
  
+      {/* ============================================================ */}
+      {/* ADD TEMPLATE MODAL */}
+      {/* ============================================================ */}
+      {showAddModal && (
+        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
+          <div className="bg-white rounded-2xl shadow-2xl w-full max-w-xl overflow-hidden">
+            {/* Modal Header */}
+            <div className="bg-gradient-to-r from-orange-500 to-amber-500 px-6 py-4">
+              <div className="flex items-center justify-between">
+                <div>
+                  <h3 className="text-xl font-bold text-white">Add New Template</h3>
+                  <p className="text-orange-100 text-sm mt-1">
+                    Upload a legal document template
+                  </p>
+                </div>
+                <button
+                  onClick={closeAddModal}
+                  className="p-2 hover:bg-white/20 rounded-lg transition cursor-pointer"
+                >
+                  <FaTimes className="text-white text-xl" />
+                </button>
+              </div>
+            </div>
+ 
+            {/* Modal Body */}
+            <div className="p-6">
+              {/* Drag & Drop Zone */}
+              <div
+                onDragEnter={handleDrag}
+                onDragLeave={handleDrag}
+                onDragOver={handleDrag}
+                onDrop={handleDrop}
+                onClick={() => fileInputRef.current?.click()}
+                className={`relative border-2 border-dashed rounded-2xl p-8 text-center transition-all cursor-pointer ${
+                  dragActive
+                    ? "border-orange-500 bg-orange-50"
+                    : uploadFile
+                    ? "border-emerald-400 bg-emerald-50"
+                    : "border-gray-300 hover:border-orange-400 hover:bg-orange-50/50"
+                }`}
+              >
+                <input
+                  ref={fileInputRef}
+                  type="file"
+                  accept=".pdf,.doc,.docx,.txt"
+                  onChange={handleFileInputChange}
+                  className="hidden"
+                />
+ 
+                {!uploadFile ? (
+                  <>
+                    <div className="w-16 h-16 bg-orange-100 rounded-full flex items-center justify-center mx-auto mb-4">
+                      <FaCloudUploadAlt className="text-3xl text-orange-500" />
+                    </div>
+                    <p className="text-lg font-medium text-slate-700 mb-2">
+                      Drag & drop your file here
+                    </p>
+                    <p className="text-sm text-slate-500 mb-4">
+                      or click to browse from your computer
+                    </p>
+                    <div className="flex items-center justify-center gap-2 text-xs text-slate-400">
+                      <span className="px-2 py-1 bg-gray-100 rounded">PDF</span>
+                      <span className="px-2 py-1 bg-gray-100 rounded">DOC</span>
+                      <span className="px-2 py-1 bg-gray-100 rounded">DOCX</span>
+                      <span className="px-2 py-1 bg-gray-100 rounded">TXT</span>
+                      <span className="text-slate-400">• Max 10MB</span>
+                    </div>
+                  </>
+                ) : (
+                  <div className="flex items-center justify-between">
+                    <div className="flex items-center gap-3">
+                      <span className="text-4xl">{getFileIcon(uploadFile.name)}</span>
+                      <div className="text-left">
+                        <p className="font-medium text-slate-800 truncate max-w-[250px]">
+                          {uploadFile.name}
+                        </p>
+                        <p className="text-sm text-slate-500">
+                          {formatFileSize(uploadFile.size)}
+                        </p>
+                      </div>
+                    </div>
+                    <button
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        removeSelectedFile();
+                      }}
+                      className="p-2 hover:bg-red-100 text-red-500 rounded-lg transition cursor-pointer"
+                      title="Remove file"
+                    >
+                      <FaTrash />
+                    </button>
+                  </div>
+                )}
+              </div>
+ 
+              {/* Info Box */}
+              <div className="mt-4 p-4 bg-blue-50 border border-blue-200 rounded-xl">
+                <p className="text-sm text-blue-700">
+                  <strong>Note:</strong> Templates uploaded by admin are automatically approved
+                  and added to the knowledge base for AI assistance.
+                </p>
+              </div>
+            </div>
+ 
+            {/* Modal Footer */}
+            <div className="flex items-center justify-end gap-3 px-6 py-4 bg-gray-50 border-t border-gray-200">
+              <button
+                onClick={closeAddModal}
+                disabled={uploading}
+                className="px-5 py-2.5 text-slate-600 hover:bg-gray-200 rounded-xl font-medium transition cursor-pointer disabled:opacity-50"
+              >
+                Cancel
+              </button>
+              <button
+                onClick={handleUploadTemplate}
+                disabled={!uploadFile || uploading}
+                className="flex items-center gap-2 px-6 py-2.5 bg-gradient-to-r from-orange-500 to-orange-600 text-white rounded-xl font-medium hover:from-orange-600 hover:to-orange-700 transition shadow-lg cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed"
+              >
+                {uploading ? (
+                  <>
+                    <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin" />
+                    Uploading...
+                  </>
+                ) : (
+                  <>
+                    <FaCloudUploadAlt />
+                    Upload Template
+                  </>
+                )}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+ 
       {/* Preview Modal */}
       {showPreviewModal && selectedTemplate && (
         <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
@@ -634,7 +962,7 @@ const AdminTemplates = () => {
         </div>
       )}
  
-      {/* Edit Modal - FIXED STRUCTURE */}
+      {/* Edit Modal */}
       {showEditModal && selectedTemplate && (
         <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
           <div className="bg-white rounded-2xl shadow-2xl w-full max-w-5xl max-h-[90vh] overflow-hidden flex flex-col">
@@ -733,6 +1061,21 @@ const AdminTemplates = () => {
                 </div>
               </div>
  
+              {/* Rejection Reason (if rejected) */}
+              {editStatus === "rejected" && (
+                <div className="mb-6">
+                  <label className="block text-sm font-semibold text-slate-700 mb-2">
+                    Rejection Reason
+                  </label>
+                  <textarea
+                    value={rejectionReason}
+                    onChange={(e) => setRejectionReason(e.target.value)}
+                    placeholder="Enter reason for rejection..."
+                    className="w-full px-4 py-3 border-2 border-gray-200 rounded-xl focus:border-red-400 focus:outline-none transition resize-none"
+                    rows={3}
+                  />
+                </div>
+              )}
  
               {/* Template Content Editor */}
               <div>
@@ -760,7 +1103,7 @@ const AdminTemplates = () => {
               </div>
             </div>
  
-            {/* Footer - INSIDE THE MODAL */}
+            {/* Footer */}
             <div className="flex items-center justify-between px-6 py-4 bg-gray-50 border-t border-gray-200 flex-shrink-0">
               <div className="text-sm text-slate-500">
                 <span className="font-medium">Tip:</span> Review and edit the
@@ -795,7 +1138,7 @@ const AdminTemplates = () => {
             </div>
           </div>
         </div>
-      )}  
+      )}
     </div>
   );
 };
